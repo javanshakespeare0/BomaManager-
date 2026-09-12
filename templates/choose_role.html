@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Choose Your Role - BomaManager</title>
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <style>
+        body { font-family: Arial; background: #f4f4f4; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .container { background: white; padding: 40px; border-radius: 10px; text-align: center; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .role-btn {
+            display: block; width: 300px; padding: 20px; margin: 15px 0;
+            border: 2px solid #ddd; border-radius: 8px; text-decoration: none;
+            color: #333; font-size: 18px; font-weight: bold; transition: 0.2s;
+        }
+        .role-btn:hover { border-color: #007bff; background: #f0f8ff; }
+        .role-btn.landlord { border-color: #28a745; }
+        .role-btn.tenant { border-color: #007bff; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Welcome to BomaManager! 👋</h1>
+    <p>One last step: How will you use BomaManager?</p>
+
+    <a href="{{ url_for('set_role', role='landlord') }}" class="role-btn landlord">
+        🏠 I am a Landlord<br>
+        <small>Manage properties, tenants, and rent</small>
+    </a>
+
+    <a href="{{ url_for('set_role', role='tenant') }}" class="role-btn tenant">
+        🔑 I am a Tenant<br>
+        <small>Pay rent, view bills, contact landlord</small>
+    </a>
+</div>
+</body>
+</html>

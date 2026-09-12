@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Payment Destination - BomaManager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+<body>
+<div class="container settings-shell">
+  <div class="settings-card">
+    <div class="settings-card-header">
+      <span class="settings-icon">💳</span>
+      <h1>Rent payment destination</h1>
+    </div>
+    <p>Tenants will use these details when paying rent.</p>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash">{{ messages[0] }}</div>
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST" class="payment-form">
+      <div class="payment-section">
+        <h2>M-Pesa</h2>
+        <label for="mpesa_type">M-Pesa option</label>
+        <select name="mpesa_type" id="mpesa_type">
+          <option value="till" {% if current_user.mpesa_type == 'till' %}selected{% endif %}>Till Number (Buy Goods)</option>
+          <option value="paybill" {% if current_user.mpesa_type == 'paybill' %}selected{% endif %}>PayBill</option>
+          <option value="send_money" {% if current_user.mpesa_type == 'send_money' %}selected{% endif %}>Send Money</option>
+          <option value="pochi" {% if current_user.mpesa_type == 'pochi' %}selected{% endif %}>Pochi la Biashara</option>
+        </select>
+
+        <label for="mpesa_till">M-Pesa number</label>
+        <input name="mpesa_till" id="mpesa_till" inputmode="numeric" placeholder="Till, PayBill, or phone number" value="{{ current_user.mpesa_till or '' }}">
+      </div>
+
+      <div class="payment-section">
+        <h2>Bank</h2>
+        <label for="bank_name">Bank name</label>
+        <input name="bank_name" id="bank_name" placeholder="e.g. KCB" value="{{ current_user.bank_name or '' }}">
+
+        <label for="account_number">Account number</label>
+        <input name="account_number" id="account_number" inputmode="numeric" placeholder="Bank account number" value="{{ current_user.account_number or '' }}">
+      </div>
+
+      <div class="settings-actions">
+        <a href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+        <button type="submit">Save payment destination</button>
+      </div>
+    </form>
+  </div>
+</div>
+</body>
+</html>

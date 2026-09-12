@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pay Rent - BomaManager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+<body>
+<div class="container">
+    <h1>Pay Rent for Room {{ room.room_number }}</h1>
+    <p>Property: {{ room.property.name }}</p>
+    <p>Rent: <b>Ksh {{ room.rent_amount }}</b></p>
+    <p>Water: <b>Ksh {{ water_bill.amount if water_bill else 0 }}</b></p>
+    <p>Total: <b>Ksh {{ total_amount }}</b></p>
+    <p>Paid so far: <b>Ksh {{ total_paid }}</b></p>
+    <p>Current balance: <b>Ksh {{ balance }}</b></p>
+    <p>Billing period: <b>{{ current_period.label }}</b></p>
+
+    <div class="property-card">
+        <h3>Landlord payment destination</h3>
+        {% if landlord.mpesa_till %}
+            <p>M-Pesa {{ {'till': 'Till', 'paybill': 'PayBill', 'send_money': 'Send Money', 'pochi': 'Pochi la Biashara'}.get(landlord.mpesa_type, 'account') }}: <b>{{ landlord.mpesa_till }}</b></p>
+        {% endif %}
+        {% if landlord.bank_name and landlord.account_number %}
+            <p>Bank: <b>{{ landlord.bank_name }}</b> · Account: <b>{{ landlord.account_number }}</b></p>
+        {% endif %}
+        {% if not landlord.mpesa_till and not landlord.account_number %}
+            <p>Your landlord has not configured a payment destination yet.</p>
+        {% endif %}
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %} <div class="flash">{{ messages[0] }}</div> {% endif %}
+    {% endwith %}
+
+    {% if paid %}
+        <div class="flash">This billing period is fully paid ✅</div>
+    {% else %}
+        {% if landlord.mpesa_till %}
+        <div class="property-card">
+            <h3>Pay with M-Pesa</h3>
+            {% if landlord.mpesa_type in ['till', 'paybill'] %}
+                <p>You will receive an STK Push. The current Daraja setup receives the payment first and must be configured with a B2C disbursement before funds can be forwarded automatically.</p>
+            {% else %}
+                <p>Use the landlord's M-Pesa details above to send the payment manually, then keep your confirmation message.</p>
+            {% endif %}
+            <form method="POST" action="{{ url_for('stk_push', room_id=room.id) }}">
+                <label for="amount">Amount to pay (Ksh)</label>
+                <input type="number" name="amount" id="amount" min="1" max="{{ balance }}" step="0.01" placeholder="Up to Ksh {{ balance }}" required>
+                <label for="phone">M-Pesa Phone Number</label>
+                <input type="text" name="phone" id="phone" placeholder="07XXXXXXXX or 01XXXXXXXX" required>
+                <small>Format: 07XXXXXXXX or 01XXXXXXXX. We will convert to 254...</small>
+                <button type="submit">Pay selected amount</button>
+            </form>
+        </div>
+        {% endif %}
+        {% if landlord.bank_name and landlord.account_number %}
+            <div class="property-card">
+                <h3>Pay by bank transfer</h3>
+                <p>Send the rent to {{ landlord.bank_name }}, account {{ landlord.account_number }}, then keep your transfer confirmation.</p>
+            </div>
+        {% endif %}
+    {% endif %}
+
+    <a href="{{ url_for('dashboard') }}" class="btn">Back to Dashboard</a>
+</div>
+</body>
+</html>

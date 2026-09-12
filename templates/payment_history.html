@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Payment History - BomaManager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+<body>
+<div class="container">
+    <h1>Payment History</h1>
+    {% if current_user.role == 'landlord' %}
+        <p class="muted">A clear record of rent and water payments collected from your tenants.</p>
+        {% if payment_rows %}
+            {% for row in payment_rows %}
+            {% set p = row.payment %}
+            <div class="property-card payment-record">
+                <div class="payment-record-header">
+                    <div>
+                        <h3>{{ p.tenant.name or p.tenant.email }}</h3>
+                        <p class="muted">Room {{ p.room.room_number }} · {{ p.room.property.name }} · {{ p.month }}</p>
+                    </div>
+                    <span class="payment-method">{{ row.payment_method }}</span>
+                </div>
+                <div class="payment-breakdown">
+                    <span>Rent <b>Ksh {{ row.rent_amount }}</b></span>
+                    <span>Water <b>Ksh {{ row.water_amount }}</b></span>
+                    <span class="payment-total">Total paid <b>Ksh {{ row.total_amount }}</b></span>
+                </div>
+                <p class="muted">Paid on {{ p.date_paid.strftime('%d %b %Y') }}</p>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p class="empty-state">No payments collected yet.</p>
+        {% endif %}
+
+        <section class="collection-summary">
+            <p class="eyebrow">Summary</p>
+            <h2>Total collection by month</h2>
+            {% if monthly_collections %}
+                {% for month, total in monthly_collections.items() %}
+                    <div class="collection-row"><span>{{ month }}</span><strong>Ksh {{ total }}</strong></div>
+                {% endfor %}
+            {% else %}
+                <p class="muted">Your monthly collection totals will appear here.</p>
+            {% endif %}
+        </section>
+    {% elif payments %}
+        {% for p in payments %}
+        <div class="property-card">
+            <p><b>Ksh {{ p.amount }}</b> for Room {{ p.room.room_number }} at {{ p.room.property.name }}</p>
+            <p>Month: {{ p.month }} | Paid on: {{ p.date_paid.strftime('%d %b %Y') }}</p>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p class="empty-state">No payments yet.</p>
+    {% endif %}
+    <a href="{{ url_for('dashboard') }}">Back to Dashboard</a>
+</div>
+</body>
+</html>

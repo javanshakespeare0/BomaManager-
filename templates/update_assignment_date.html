@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Update Assignment Date - BomaManager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+<body>
+<div class="container">
+    <h1>Update Assignment Date</h1>
+    <p>Room {{ room.room_number }} · {{ room.tenant.name or room.tenant.email }}</p>
+    <p class="muted">Changing this date starts a monthly billing schedule from the selected date.</p>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}<div class="flash">{{ messages[0] }}</div>{% endif %}
+    {% endwith %}
+    <form method="POST">
+        <label for="assigned_date">Assignment date</label>
+        <input type="date" name="assigned_date" id="assigned_date" value="{{ room.assigned_date.isoformat() if room.assigned_date else '' }}" required>
+        <button type="submit">Save Assignment Date</button>
+    </form>
+    <p><a href="{{ url_for('dashboard') }}">Back to dashboard</a></p>
+</div>
+</body>
+</html>

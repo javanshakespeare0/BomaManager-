@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Water Bill - BomaManager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+<body>
+<div class="container">
+    <h1>Water Bill for Room {{ room.room_number }}</h1>
+    <p>Tenant: <b>{{ room.tenant.email }}</b></p>
+    <p>Billing period: <b>{{ current_period.label }}</b></p>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}<div class="flash">{{ messages[0] }}</div>{% endif %}
+    {% endwith %}
+
+    <form method="POST">
+        <label for="units_used">Water units used</label>
+        <input type="number" name="units_used" id="units_used" min="0" step="0.01" value="{{ bill.units_used if bill else '' }}" required>
+
+        <label for="rate_per_unit">Amount per unit (Ksh)</label>
+        <input type="number" name="rate_per_unit" id="rate_per_unit" min="0" step="0.01" value="{{ bill.rate_per_unit if bill else '' }}" required>
+
+        <p>Water amount: <b>Ksh <span id="water-total">{{ bill.amount if bill else '0.00' }}</span></b></p>
+        <button type="submit">Save Water Bill</button>
+    </form>
+    <p><a href="{{ url_for('dashboard') }}">Back to dashboard</a></p>
+</div>
+<script>
+    const units = document.getElementById('units_used');
+    const rate = document.getElementById('rate_per_unit');
+    const total = document.getElementById('water-total');
+
+    function updateTotal() {
+        total.textContent = ((Number(units.value) || 0) * (Number(rate.value) || 0)).toFixed(2);
+    }
+
+    units.addEventListener('input', updateTotal);
+    rate.addEventListener('input', updateTotal);
+</script>
+</body>
+</html>

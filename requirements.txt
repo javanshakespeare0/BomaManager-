@@ -1,0 +1,8 @@
+Flask
+Flask-SQLAlchemy
+Flask-Login
+Flask-Bcrypt
+Flask-Dance[google]
+requests
+
+# pin versions if desired, e.g. Flask==2.3.2

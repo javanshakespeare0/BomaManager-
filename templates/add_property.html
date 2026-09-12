@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Add Property - BomaManager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <style>
+        .property-grid { display: grid; gap: 12px; }
+        .suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        .suggestion-chip { background: #eef6ff; color: #1b5ea8; padding: 6px 10px; border-radius: 999px; font-size: 12px; cursor: pointer; border: 1px solid #cfe3ff; }
+        .suggestion-chip:hover { background: #ddeeff; }
+        .helper { color: #556; font-size: 12px; margin-top: -4px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Add Property</h1>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}<div class="flash">{{ messages[0] }}</div>{% endif %}
+    {% endwith %}
+
+    <form method="POST" class="property-grid">
+        <label>
+            <span>Property type</span>
+            <select name="property_type" id="property_type" required>
+                {% for ptype in property_types %}
+                    <option value="{{ ptype }}">{{ ptype }}</option>
+                {% endfor %}
+            </select>
+        </label>
+
+        <label>
+            <span>Property name</span>
+            <input type="text" id="property_name" name="name" placeholder="Example: Riverside Homes" required>
+            <div class="suggestions" id="property-name-suggestions">
+                <span class="suggestion-chip">Riverside Homes</span>
+                <span class="suggestion-chip">Maple View</span>
+                <span class="suggestion-chip">Blue Pearl</span>
+                <span class="suggestion-chip">Sunshine Apartments</span>
+                <span class="suggestion-chip">Greenstone Residency</span>
+                <span class="suggestion-chip">Oak Crest</span>
+                <span class="suggestion-chip">Cedar Heights</span>
+                <span class="suggestion-chip">Willow Court</span>
+                <span class="suggestion-chip">Nairobi Heights</span>
+                <span class="suggestion-chip">Pinewood Homes</span>
+            </div>
+        </label>
+
+        <label>
+            <span>Location</span>
+            <input type="text" name="location" placeholder="Example: Nairobi, Westlands" required>
+        </label>
+
+        <label>
+            <span>Room type</span>
+            <select name="room_type" id="room_type" required>
+                {% for rtype in room_types %}
+                    <option value="{{ rtype }}">{{ rtype }}</option>
+                {% endfor %}
+            </select>
+        </label>
+
+        <label>
+            <span>Custom room prefix (optional)</span>
+            <input type="text" name="room_prefix" id="room_prefix" placeholder="Example: SR, BS, A, East, 1BR">
+        </label>
+
+        <label>
+            <span>Starting room number</span>
+            <input type="number" name="room_start" id="room_start" min="1" value="1">
+        </label>
+
+        <label>
+            <span>How many rooms?</span>
+            <input type="number" name="room_count" min="1" max="200" value="4" required>
+        </label>
+
+        <label>
+            <span>Rent amount per room</span>
+            <input type="number" name="rent_amount" min="1" step="0.01" placeholder="15000" required>
+        </label>
+
+        <div>
+            <div class="helper">Suggested room names</div>
+            <div class="suggestions" id="room-name-preview">
+                <span class="suggestion-chip">SR-01</span>
+                <span class="suggestion-chip">BS-01</span>
+                <span class="suggestion-chip">1BR-01</span>
+                <span class="suggestion-chip">2BR-01</span>
+                <span class="suggestion-chip">A-01</span>
+                <span class="suggestion-chip">EAST-01</span>
+                <span class="suggestion-chip">FL1-01</span>
+                <span class="suggestion-chip">UNIT-01</span>
+            </div>
+        </div>
+
+        <button type="submit">Add Property and Rooms</button>
+    </form>
+
+    <p><a href="{{ url_for('dashboard') }}">Back to dashboard</a></p>
+</div>
+
+<script>
+    const roomType = document.getElementById('room_type');
+    const roomPrefix = document.getElementById('room_prefix');
+    const roomStart = document.getElementById('room_start');
+    const roomPreview = document.getElementById('room-name-preview');
+    const propertyType = document.getElementById('property_type');
+    const propertyName = document.getElementById('property_name');
+
+    const prefixMap = {
+        'Single Room': 'SR',
+        'Bedsitter': 'BS',
+        'One Bedroom': '1BR',
+        'Two Bedroom': '2BR',
+        'Three Bedroom': '3BR',
+        'Studio': 'ST',
+        'Apartment': 'APT',
+        'Hostel': 'H',
+        'Townhouse': 'TH',
+        'Commercial Space': 'COM'
+    };
+
+    function updateRoomPreview() {
+        const custom = (roomPrefix.value || '').trim();
+        const type = roomType.value || 'Single Room';
+        const prefix = custom || prefixMap[type] || type.slice(0, 2).toUpperCase();
+        const start = Number(roomStart.value || 1);
+        roomPreview.innerHTML = Array.from({length: 8}, (_, i) => {
+            const num = String(start + i).padStart(2, '0');
+            return '<span class="suggestion-chip">' + prefix + '-' + num + '</span>';
+        }).join('');
+    }
+
+    function applyDefaultNameSuggestion() {
+        const type = propertyType.value || 'Apartment';
+        const names = {
+            'Apartment': 'Riverside Homes',
+            'Bedsitter': 'Maple View',
+            'Single Room': 'Greenstone Rooms',
+            'One Bedroom': 'Sunstone Apartments',
+            'Two Bedroom': 'Oak Crest',
+            'Three Bedroom': 'Cedar Residency',
+            'Studio': 'Starline Studio',
+            'Hostel': 'Nairobi Hostels',
+            'Townhouse': 'Willow Townhomes',
+            'Commercial Space': 'Prime Business Hub'
+        };
+        if (!propertyName.value.trim()) {
+            propertyName.value = names[type] || 'New Property';
+        }
+    }
+
+    roomType.addEventListener('change', updateRoomPreview);
+    roomPrefix.addEventListener('input', updateRoomPreview);
+    roomStart.addEventListener('input', updateRoomPreview);
+    propertyType.addEventListener('change', applyDefaultNameSuggestion);
+    document.getElementById('property-name-suggestions').addEventListener('click', function (e) {
+        if (e.target && e.target.classList.contains('suggestion-chip')) {
+            propertyName.value = e.target.textContent.trim();
+        }
+    });
+    updateRoomPreview();
+    applyDefaultNameSuggestion();
+</script>
+</body>
+</html>

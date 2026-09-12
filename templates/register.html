@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Register - BomaManager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <style>
+      .google-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            background: #ffffff;
+            color: #444;
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: center;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 500;
+            font-size: 15px;
+            margin-top: 10px;
+            transition: 0.2s;
+        }
+      .google-btn:hover { background: #f5f5f5; }
+      .divider {
+            display: flex; align-items: center; text-align: center;
+            margin: 20px 0; color: #888;
+        }
+      .divider::before,.divider::after {
+            content: ''; flex: 1; border-bottom: 1px solid #ddd;
+        }
+      .divider:not(:empty)::before { margin-right:.5em; }
+      .divider:not(:empty)::after { margin-left:.5em; }
+    </style>
+</head>
+<body>
+<div class="container auth-shell">
+    <div class="auth-card">
+        <p class="eyebrow">BomaManager</p>
+        <h1>Create account</h1>
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <div class="flash" style="background: #ffdddd; color: #a94442; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+                {{ messages[0] }}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <form method="POST">
+            <input type="text" name="name" placeholder="User name" required maxlength="100" style="width: 100%; padding: 10px; margin-bottom: 10px;">
+            <input type="tel" name="contact_number" id="contact_number" placeholder="Contact number" maxlength="30" style="width: 100%; padding: 10px; margin-bottom: 10px;">
+            <input type="email" name="email" placeholder="Email" required style="width: 100%; padding: 10px; margin-bottom: 10px;">
+            <input type="password" name="password" id="password" placeholder="Password" required style="width: 100%; padding: 10px; margin-bottom: 6px;">
+            <div class="password-meter" aria-live="polite">
+                <div id="password-strength-bar" class="password-strength-bar"></div>
+            </div>
+            <small id="password-strength-text" class="password-strength-text">Password strength:—</small>
+            <select name="role" required style="width: 100%; padding: 10px; margin-top: 12px; margin-bottom: 15px;">
+                <option value="">-- Select Role --</option>
+                <option value="landlord">Landlord</option>
+                <option value="tenant">Tenant</option>
+            </select>
+            <div id="landlord-field" hidden>
+                <select name="landlord_id" id="landlord_id" style="width: 100%; padding: 10px; margin-bottom: 15px;">
+                    <option value="">-- Select Your Landlord --</option>
+                    {% for landlord in landlords %}
+                        <option value="{{ landlord.id }}">{{ landlord.email }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" style="width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 5px;">
+                Register
+            </button>
+        </form>
+
+        <div class="divider">OR</div>
+
+        <a href="{{ url_for('google_login') }}?register=true" class="google-btn">
+            <img src="https://www.gstatic.com/images/branding/product/1x/gsa_64dp.png" width="18">
+            Register with Google
+        </a>
+
+        <p style="text-align: center; margin-top: 20px;">
+            Already have an account? <a href="{{ url_for('login') }}">Login</a>
+        </p>
+    </div>
+</div>
+<script>
+    const roleSelect = document.querySelector('select[name="role"]');
+    const landlordField = document.getElementById('landlord-field');
+    const landlordSelect = document.getElementById('landlord_id');
+    const passwordInput = document.getElementById('password');
+    const strengthBar = document.getElementById('password-strength-bar');
+    const strengthText = document.getElementById('password-strength-text');
+
+    function updateLandlordField() {
+        const isTenant = roleSelect.value === 'tenant';
+        landlordField.hidden = !isTenant;
+        landlordSelect.required = isTenant;
+        document.getElementById('contact_number').required = isTenant;
+        if (!isTenant) landlordSelect.value = '';
+    }
+
+    function passwordStrength(password) {
+        let score = 0;
+        if (!password) return { score: 0, label: '—' };
+        if (password.length >= 8) score += 1;
+        if (/[A-Z]/.test(password)) score += 1;
+        if (/[0-9]/.test(password)) score += 1;
+        if (/[^A-Za-z0-9]/.test(password)) score += 1;
+
+        if (score <= 1) return { score: 1, label: 'Weak' };
+        if (score === 2) return { score: 2, label: 'Fair' };
+        if (score === 3) return { score: 3, label: 'Good' };
+        return { score: 4, label: 'Strong' };
+    }
+
+    function updatePasswordMeter() {
+        const strength = passwordStrength(passwordInput.value);
+        const widths = ['0%', '25%', '50%', '75%', '100%'];
+        const colors = ['#d9534f', '#f0ad4e', '#f0ad4e', '#5bc0de', '#28a745'];
+        strengthBar.style.width = widths[strength.score];
+        strengthBar.style.background = colors[strength.score];
+        strengthText.textContent = 'Password strength: ' + strength.label;
+    }
+
+    roleSelect.addEventListener('change', updateLandlordField);
+    passwordInput.addEventListener('input', updatePasswordMeter);
+    updateLandlordField();
+    updatePasswordMeter();
+</script>
+</body>
+</html>

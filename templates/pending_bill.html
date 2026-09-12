@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pending Bill - BomaManager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+<body>
+<div class="container subscription-shell">
+    <div class="subscription-header">
+        <div>
+            <p class="eyebrow">Billing</p>
+            <h1>Pending bill for Room {{ room.room_number }}</h1>
+            <p class="muted">Tenant: {{ room.tenant.name or room.tenant.email }}</p>
+        </div>
+        <a href="{{ url_for('dashboard') }}" class="btn secondary-action">Back to dashboard</a>
+    </div>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}<div class="flash">{{ messages[0] }}</div>{% endif %}
+    {% endwith %}
+
+    <div class="property-card">
+        <p class="eyebrow">Current period</p>
+        <h3>{{ current_period.label }}</h3>
+        <form method="POST" class="subscription-form">
+            <label for="title">Bill title</label>
+            <input type="text" name="title" id="title" value="{{ bill.title if bill else 'Miscellaneous bill' }}" required>
+
+            <label for="amount">Amount (Ksh)</label>
+            <input type="number" name="amount" id="amount" min="0" step="0.01" value="{{ '%.2f'|format(bill.amount) if bill else '' }}" required>
+
+            <label for="note">Note (optional)</label>
+            <input type="text" name="note" id="note" value="{{ bill.note if bill else '' }}" placeholder="e.g. generator, repair, gate fee">
+
+            <button type="submit" class="btn primary-action">Save pending bill</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>

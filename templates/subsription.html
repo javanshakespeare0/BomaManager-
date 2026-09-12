@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+<body>
+<div class="container subscription-shell">
+  <header class="subscription-header">
+    <div>
+      <p class="eyebrow">BomaManager billing</p>
+      <h1>Choose your plan</h1>
+      <p class="muted">Keep your properties, rooms, and rent collection active.</p>
+    </div>
+    <a href="{{ url_for('dashboard') }}" class="btn secondary-action">Back to dashboard</a>
+  </header>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}<div class="flash">{{ messages[0] }}</div>{% endif %}
+  {% endwith %}
+
+  {% if user.subscription_status == 'active' and user.subscription_expiry %}
+    <section class="subscription-status status-active">
+      <div>
+        <p class="eyebrow">Current subscription</p>
+        <h2>{{ user.subscription_plan|upper }} plan is active</h2>
+        <p>Access continues until {{ user.subscription_expiry.strftime('%d %b %Y') }}.</p>
+      </div>
+      <strong>{{ days_left }} days left</strong>
+    </section>
+  {% elif user.has_active_subscription() %}
+    <section class="subscription-status status-trial">
+      <div>
+        <p class="eyebrow">Current subscription</p>
+        <h2>Your free trial is active</h2>
+        <p>Choose a paid plan before your trial ends to keep uninterrupted access.</p>
+      </div>
+      <strong>{{ days_left }} days left</strong>
+    </section>
+  {% else %}
+    <section class="subscription-status status-locked">
+      <div>
+        <p class="eyebrow">Action required</p>
+        <h2>Your account is locked</h2>
+        <p>Your subscription has expired. Pay for a plan to unlock your properties and rent collection.</p>
+      </div>
+    </section>
+  {% endif %}
+
+  <section class="plan-grid" aria-label="Subscription plans">
+    <article class="plan-card">
+      <div class="plan-card-header">
+        <div>
+          <p class="eyebrow">For growing landlords</p>
+          <h2>Basic</h2>
+        </div>
+        <p class="plan-price">Ksh 500 <small>/ month</small></p>
+      </div>
+      <ul class="plan-features">
+        <li>Up to 20 rooms</li>
+        <li>Rent collection via M-Pesa</li>
+        <li>Tenant management</li>
+      </ul>
+      <div class="payment-methods">
+        <p class="method-label">Choose how to pay</p>
+        <details class="payment-method" open>
+          <summary>M-Pesa</summary>
+          <form action="{{ url_for('pay_subscription') }}" method="POST" class="subscription-form">
+            <input type="hidden" name="plan" value="basic">
+            <label for="basic-phone">M-Pesa phone number</label>
+            <input type="tel" id="basic-phone" name="phone" inputmode="numeric" placeholder="07XXXXXXXX" required>
+            <button type="submit">Send M-Pesa prompt</button>
+          </form>
+        </details>
+        <details class="payment-method">
+          <summary>Bank transfer</summary>
+          <div class="bank-instructions">Transfer Ksh 500 to the bank account provided by BomaManager support, then submit the transfer reference below.</div>
+          <form action="{{ url_for('bank_subscription_payment') }}" method="POST" class="subscription-form">
+            <input type="hidden" name="plan" value="basic">
+            <label for="basic-reference">Transfer reference</label>
+            <input type="text" id="basic-reference" name="reference" placeholder="Bank reference number" required>
+            <button type="submit">Submit bank reference</button>
+          </form>
+        </details>
+      </div>
+    </article>
+
+    <article class="plan-card plan-card-featured">
+      <div class="plan-card-header">
+        <div>
+          <p class="eyebrow">For established portfolios</p>
+          <h2>Pro</h2>
+        </div>
+        <p class="plan-price">Ksh 1,000 <small>/ month</small></p>
+      </div>
+      <ul class="plan-features">
+        <li>Unlimited rooms</li>
+        <li>Everything in Basic</li>
+        <li>Reports and analytics</li>
+        <li>Priority support</li>
+      </ul>
+      <div class="payment-methods">
+        <p class="method-label">Choose how to pay</p>
+        <details class="payment-method" open>
+          <summary>M-Pesa</summary>
+          <form action="{{ url_for('pay_subscription') }}" method="POST" class="subscription-form">
+            <input type="hidden" name="plan" value="pro">
+            <label for="pro-phone">M-Pesa phone number</label>
+            <input type="tel" id="pro-phone" name="phone" inputmode="numeric" placeholder="07XXXXXXXX" required>
+            <button type="submit">Send M-Pesa prompt</button>
+          </form>
+        </details>
+        <details class="payment-method">
+          <summary>Bank transfer</summary>
+          <div class="bank-instructions">Transfer Ksh 1,000 to the bank account provided by BomaManager support, then submit the transfer reference below.</div>
+          <form action="{{ url_for('bank_subscription_payment') }}" method="POST" class="subscription-form">
+            <input type="hidden" name="plan" value="pro">
+            <label for="pro-reference">Transfer reference</label>
+            <input type="text" id="pro-reference" name="reference" placeholder="Bank reference number" required>
+            <button type="submit">Submit bank reference</button>
+          </form>
+        </details>
+      </div>
+    </article>
+  </section>
+</div>
+</body>
+</html>

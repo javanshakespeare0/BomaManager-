@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dashboard - BomaManager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+<body>
+<div class="container dashboard-shell">
+    <header class="dashboard-header">
+        <div>
+            <p class="eyebrow">BomaManager</p>
+            <h1>Welcome, {{ current_user.name or current_user.email }}</h1>
+            <p class="muted">Manage your properties, rooms, and tenants.</p>
+        </div>
+        <div class="dashboard-header-actions">
+            <label class="theme-control" for="theme-selector">Theme
+                <select id="theme-selector" data-theme-selector aria-label="Choose theme">
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                    <option value="contrast">High contrast</option>
+                </select>
+            </label>
+            <a href="{{ url_for('logout') }}" class="logout-link">Log out</a>
+        </div>
+    </header>
+
+    {% if current_user.role == 'landlord' %}
+        <nav class="dashboard-actions" aria-label="Dashboard actions">
+            <a href="{{ url_for('add_property') }}" class="btn primary-action">Add property</a>
+            <a href="{{ url_for('add_tenant') }}" class="btn secondary-action">Add tenant</a>
+            <a href="{{ url_for('subscription_page') }}" class="btn secondary-action">Subscription</a>
+            <a href="{{ url_for('payment_history') }}" class="btn secondary-action">Payment history</a>
+            <a href="{{ url_for('update_contact') }}" class="btn secondary-action">Update contact</a>
+            <a href="{{ url_for('settings') }}" class="btn secondary-action">Payment destination</a>
+        </nav>
+    {% endif %}
+    
+    {% with messages = get_flashed_messages() %}
+      {% if messages %} <div class="flash">{{ messages[0] }}</div> {% endif %}
+    {% endwith %}
+
+    {% if current_user.role == 'landlord' %}
+        <section class="countdown-banner {{ 'countdown-banner-active' if current_user.has_active_subscription() else 'countdown-banner-trial' }}" {% if subscription_deadline %}data-countdown-target="{{ subscription_deadline.isoformat() }}" data-subscription-countdown{% endif %}>
+            <div>
+                <p class="eyebrow">Subscription countdown</p>
+                {% if current_user.subscription_status == 'active' and current_user.subscription_expiry %}
+                    <h2>{{ current_user.subscription_plan|upper }} plan active</h2>
+                    <p>Access ends {{ current_user.subscription_expiry.strftime('%d %b %Y at %H:%M UTC') }}.</p>
+                {% elif current_user.trial_ends_at %}
+                    <h2>Free trial active</h2>
+                    <p>Free access ends {{ current_user.trial_ends_at.strftime('%d %b %Y at %H:%M UTC') }}.</p>
+                {% else %}
+                    <h2>Subscription needed</h2>
+                    <p>Choose a plan to keep managing your properties.</p>
+                {% endif %}
+            </div>
+            <div class="countdown-grid">
+                <div class="countdown-box"><span>Days</span><strong data-unit="days">{{ '%02d'|format(subscription_countdown.days) }}</strong></div>
+                <div class="countdown-box"><span>Hours</span><strong data-unit="hours">{{ '%02d'|format(subscription_countdown.hours) }}</strong></div>
+                <div class="countdown-box"><span>Minutes</span><strong data-unit="minutes">{{ '%02d'|format(subscription_countdown.minutes) }}</strong></div>
+                <div class="countdown-box"><span>Seconds</span><strong data-unit="seconds">{{ '%02d'|format(subscription_countdown.seconds) }}</strong></div>
+            </div>
+            <div class="countdown-action">
+                <strong>{{ current_user.days_remaining() }} days left</strong>
+                <a href="{{ url_for('subscription_page') }}" class="btn secondary-action">Manage plan</a>
+            </div>
+        </section>
+        <section class="monthly-collection-bar">
+            <div>
+                <p class="eyebrow">{{ current_month_label }}</p>
+                <h2>Monthly collection</h2>
+            </div>
+            <strong>Ksh {{ '%.2f'|format(total_month_collection) }}</strong>
+        </section>
+
+        <section class="overview-grid" aria-label="Portfolio overview">
+            <div class="overview-card">
+                <span>Properties</span>
+                <strong>{{ properties|length }}</strong>
+            </div>
+            <div class="overview-card">
+                <span>Tenants</span>
+                <strong>{{ tenants|length }}</strong>
+            </div>
+            <div class="overview-card">
+                <span>Monthly income</span>
+                <strong>Ksh {{ '%.2f'|format(total_month_collection) }}</strong>
+            </div>
+            <div class="overview-card">
+                <span>Current plan</span>
+                <strong>{{ current_user.subscription_plan|upper if current_user.subscription_plan else 'TRIAL' }}</strong>
+            </div>
+        </section>
+
+        <div class="property-card">
+            <h3>Rent payment destination</h3>
+            {% if current_user.mpesa_till %}
+                <p>M-Pesa {{ {'till': 'Till', 'paybill': 'PayBill', 'send_money': 'Send Money', 'pochi': 'Pochi la Biashara'}.get(current_user.mpesa_type, 'account') }}: <b>{{ current_user.mpesa_till }}</b></p>
+            {% endif %}
+            {% if current_user.bank_name and current_user.account_number %}
+                <p>Bank: <b>{{ current_user.bank_name }}</b> · Account: <b>{{ current_user.account_number }}</b></p>
+            {% endif %}
+            {% if not current_user.mpesa_till and not current_user.account_number %}
+                <p class="muted">No payment destination saved yet.</p>
+            {% endif %}
+        </div>
+        <section class="tenant-directory">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">People</p>
+                    <h2>Your tenants</h2>
+                </div>
+                <div class="section-actions">
+                    <span class="count-badge">{{ tenants|length }} {{ 'tenant' if tenants|length == 1 else 'tenants' }}</span>
+                    <a href="{{ url_for('add_tenant') }}" class="btn secondary-action">Add tenant</a>
+                </div>
+            </div>
+            {% if tenants %}
+                <div class="tenant-list">
+                    {% for tenant in tenants %}
+                        <div class="tenant-row">
+                            <div>
+                                <strong>{{ tenant.name or tenant.email }}</strong>
+                                <span>{{ tenant.email }}</span>
+                            </div>
+                            <b>{{ tenant.contact_number or 'No contact number' }}</b>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="empty-state">No tenants linked yet.</p>
+            {% endif %}
+        </section>
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">Portfolio</p>
+                <h2>Your properties</h2>
+            </div>
+            <span class="count-badge">{{ properties|length }} {{ 'property' if properties|length == 1 else 'properties' }}</span>
+        </div>
+        {% if properties %}
+            {% for p in properties %}
+            <div class="property-card">
+                <div class="property-header">
+                    <div>
+                        <h3>{{ p.name }}</h3>
+                        <p class="muted">{{ p.location }} · {{ p.rooms|length }} {{ 'room' if p.rooms|length == 1 else 'rooms' }}</p>
+                    </div>
+                    <div class="property-actions">
+                        <a class="btn secondary-action" href="{{ url_for('edit_property', prop_id=p.id) }}">Edit name</a>
+                        <a class="btn primary-action" href="{{ url_for('add_room', prop_id=p.id) }}">Add room</a>
+                        <form method="POST" action="{{ url_for('delete_property', prop_id=p.id) }}">
+                            <button class="btn btn-danger" type="submit" onclick="return confirm('Delete this property and all its rooms?');">Delete</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="room-list">
+                {% for r in p.rooms %}
+                    <div class="room-row{% if r.tenant and not payments_by_room.get(r.id) %} unpaid-room{% endif %}">
+                        <div class="room-details">
+                            <div class="room-main">
+                                <strong>Room {{ r.room_number }}</strong>
+                                <span class="room-price">Ksh {{ r.rent_amount }}</span>
+                            </div>
+
+                            <div class="room-status-block">
+                                {% if r.tenant %}
+                                    <span class="occupied">Occupied</span>
+                                    {% if payments_by_room.get(r.id) and payments_by_room[r.id]['balance'] == 0 %}
+                                        <span class="paid-pill">Paid</span>
+                                    {% elif r.tenant %}
+                                        <span class="unpaid-badge">Due: Ksh {{ payments_by_room[r.id]['balance'] if payments_by_room.get(r.id) else '0' }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="vacant">Vacant</span>
+                                {% endif %}
+                            </div>
+
+                            <div class="room-tenant-block">
+                                {% if r.tenant %}
+                                    <span><b>Tenant:</b> {{ r.tenant.name or r.tenant.email }}</span>
+                                    <span><b>Phone:</b> {{ r.tenant.contact_number or 'No contact number' }}</span>
+                                {% else %}
+                                    <span class="muted-block">No tenant assigned</span>
+                                {% endif %}
+                            </div>
+
+                            <div class="room-billing-block">
+                                {% if r.tenant and current_period_by_room[r.id] %}
+                                    <span class="billing-period">Billing: {{ current_period_by_room[r.id]['label'] }}</span>
+                                    {% set pending_total = (payments_by_room.get(r.id, {}).pending_total) if payments_by_room.get(r.id) else 0 %}
+                                    {% if pending_total %}
+                                        <span class="pending-bill-pill">Pending bill: Ksh {{ '%.2f'|format(pending_total) }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="muted-block">No billing period</span>
+                                {% endif %}
+                            </div>
+
+                            <div class="room-payment-block">
+                                {% if r.tenant and payments_by_room.get(r.id) %}
+                                    <span class="payment-stat">Paid: Ksh {{ payments_by_room[r.id]['total_paid'] }}</span>
+                                    <span class="payment-stat">Remaining: Ksh {{ payments_by_room[r.id]['balance'] }}</span>
+                                {% elif r.tenant %}
+                                    <span class="payment-stat">Paid: Ksh 0</span>
+                                    <span class="payment-stat">Remaining: Ksh {{ r.rent_amount }}</span>
+                                {% else %}
+                                    <span class="muted-block">Awaiting tenant</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="room-actions">
+                    <details class="action-menu">
+                        <summary aria-label="More options for Room {{ r.room_number }}"><span aria-hidden="true">&#8942;</span></summary>
+                        <div class="action-menu-items">
+                            <a href="{{ url_for('edit_room', room_id=r.id) }}">Edit rent amount</a>
+                            {% if r.tenant %}
+                                <a href="{{ url_for('update_assignment_date', room_id=r.id) }}">Update assignment date</a>
+                                <a href="{{ url_for('water_bill', room_id=r.id) }}">{{ 'Edit water bill' if water_bills.get(r.id) else 'Add water bill' }}</a>
+                                <a href="{{ url_for('pending_bill', room_id=r.id) }}">Add pending bill</a>
+                            {% endif %}
+                            <form method="POST" action="{{ url_for('delete_room', room_id=r.id) }}">
+                                <button type="submit" onclick="return confirm('Delete this room?');">Delete room</button>
+                            </form>
+                        </div>
+                    </details>
+                    {% if r.tenant %}
+                        <a class="btn btn-danger" href="{{ url_for('vacate_room', room_id=r.id) }}">Vacate</a>
+                        <a class="btn" href="{{ url_for('pending_bill', room_id=r.id) }}">Add pending bill</a>
+                        {% if payments_by_room.get(r.id) and payments_by_room[r.id]['balance'] == 0 %}
+                            <form method="POST" action="{{ url_for('mark_rent_unpaid', room_id=r.id) }}">
+                                <button class="btn secondary-action" type="submit">Mark unpaid</button>
+                            </form>
+                        {% else %}
+                            <form method="POST" action="{{ url_for('mark_rent_paid', room_id=r.id) }}">
+                                <button class="btn primary-action" type="submit">Mark paid</button>
+                            </form>
+                        {% endif %}
+                    {% else %}
+                        <a class="btn" href="{{ url_for('assign_tenant', room_id=r.id) }}">Assign</a>
+                    {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+                {% if not p.rooms %}<p class="empty-state">No rooms added yet.</p>{% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state large-empty"><strong>No properties yet</strong><span>Add your first property to get started.</span></div>
+        {% endif %}
+    
+    {% else %}
+        <h2>Tenant Dashboard</h2>
+        <p><a class="btn secondary-action" href="{{ url_for('update_contact') }}">Update my contact number</a></p>
+        {% if landlord %}
+            <div class="property-card">
+                <h3>Contact your landlord</h3>
+                <p>{{ landlord.name or landlord.email }}</p>
+                <p><b>{{ landlord.contact_number or 'No contact number provided yet' }}</b></p>
+            </div>
+        {% endif %}
+        {% if room %}
+            <div class="property-card">
+                <div class="tenant-rent-header">
+                    <div>
+                        <p class="eyebrow">Current room</p>
+                        <h2>Room {{ room.room_number }}</h2>
+                        <p class="muted">{{ room.property.name }}</p>
+                    </div>
+                    <span class="payment-status {{ 'status-paid' if paid else 'status-unpaid' }}">{{ 'Paid' if paid else 'Payment due' }}</span>
+                </div>
+                <div class="tenant-summary-grid">
+                    <div><span>Rent</span><strong>Ksh {{ room.rent_amount }}</strong></div>
+                    <div><span>Water</span><strong>Ksh {{ water_bill.amount if water_bill else 0 }}</strong></div>
+                    <div><span>Total due</span><strong>Ksh {{ total_amount }}</strong></div>
+                    <div><span>Balance</span><strong>Ksh {{ balance }}</strong></div>
+                </div>
+                {% if current_period %}<p class="billing-period tenant-period">Billing period: {{ current_period.label }}</p>{% endif %}
+                {% if rent_due_target %}
+                    <div class="countdown-banner countdown-banner-tenant" data-countdown-target="{{ rent_due_target.isoformat() }}">
+                        <div>
+                            <p class="eyebrow">Rent countdown</p>
+                            <h2>Current bill due</h2>
+                        </div>
+                        <div class="countdown-grid compact-countdown">
+                            <div class="countdown-box"><span>Days</span><strong data-unit="days">{{ '%02d'|format(rent_due_countdown.days) }}</strong></div>
+                            <div class="countdown-box"><span>Hours</span><strong data-unit="hours">{{ '%02d'|format(rent_due_countdown.hours) }}</strong></div>
+                            <div class="countdown-box"><span>Minutes</span><strong data-unit="minutes">{{ '%02d'|format(rent_due_countdown.minutes) }}</strong></div>
+                            <div class="countdown-box"><span>Seconds</span><strong data-unit="seconds">{{ '%02d'|format(rent_due_countdown.seconds) }}</strong></div>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+            <a class="btn primary-action tenant-pay-button" href="{{ url_for('pay_rent', room_id=room.id) }}">Pay rent now</a>
+        {% else %}
+            <p><b>{{ payment_status }}</b></p>
+        {% endif %}
+    {% endif %}
+</div>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[data-countdown-target]').forEach(function (banner) {
+            const target = banner.getAttribute('data-countdown-target');
+            if (!target) return;
+            const deadline = new Date(target);
+            const parts = banner.querySelectorAll('[data-unit]');
+            const units = ['days', 'hours', 'minutes', 'seconds'];
+
+            function updateCountdown() {
+                const totalMs = Math.max(0, deadline.getTime() - Date.now());
+                const totalSeconds = Math.floor(totalMs / 1000);
+                const days = Math.floor(totalSeconds / 86400);
+                const hours = Math.floor((totalSeconds % 86400) / 3600);
+                const minutes = Math.floor((totalSeconds % 3600) / 60);
+                const seconds = totalSeconds % 60;
+                const values = { days, hours, minutes, seconds };
+
+                parts.forEach(function (unitNode) {
+                    const key = unitNode.getAttribute('data-unit');
+                    if (key && values[key] !== undefined) {
+                        unitNode.textContent = String(values[key]).padStart(2, '0');
+                    }
+                });
+
+                if (totalMs <= 0) {
+                    if (banner.hasAttribute('data-subscription-countdown')) {
+                        window.location.href = "{{ url_for('subscription_page') }}";
+                        return;
+                    }
+                    const label = banner.querySelector('.eyebrow');
+                    if (label) label.textContent = 'Time elapsed';
+                }
+            }
+
+            updateCountdown();
+            setInterval(updateCountdown, 1000);
+        });
+    });
+</script>
+</body>
+</html>

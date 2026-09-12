@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BomaManager Admin Dashboard</title>
+  <style>
+    body { font-family: Georgia, serif; margin: 0; padding: 32px; background: radial-gradient(circle at top right, #21423b 0, #111c1b 42%); color: #ecf3f1; }
+    main { max-width: 1100px; margin: auto; }
+    header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+    a, button { color: #fff; background: #26796d; border: 0; border-radius: 6px; padding: 9px 13px; text-decoration: none; cursor: pointer; transition: background .18s ease, transform .18s ease, box-shadow .18s ease; }
+    a:hover, button:hover { background: #35a08f; transform: translateY(-1px); box-shadow: 0 7px 16px rgba(0, 0, 0, .2); }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin: 28px 0; }
+    .stat, section { padding: 18px; background: rgba(27, 44, 43, .94); border: 1px solid #38504c; border-radius: 8px; }
+    .admin-tabs { position: sticky; top: 14px; z-index: 5; display: flex; gap: 6px; align-items: center; margin: 24px 0 20px; padding: 6px; background: rgba(14, 25, 24, .92); border: 1px solid rgba(126, 177, 164, .28); border-radius: 10px; box-shadow: 0 10px 24px rgba(0, 0, 0, .2); backdrop-filter: blur(12px); }
+    .admin-tabs-label { padding: 0 12px 0 8px; color: #8fa9a3; font: 700 .68rem Arial, sans-serif; letter-spacing: .12em; text-transform: uppercase; white-space: nowrap; }
+    .admin-tabs a { flex: 1; padding: 11px 16px; color: #b9cfca; background: transparent; border: 1px solid transparent; border-radius: 7px; text-align: center; font: 700 .82rem Arial, sans-serif; letter-spacing: .02em; }
+    .admin-tabs a:hover, .admin-tabs a:focus-visible { color: #f2efe7; background: rgba(53, 160, 143, .16); border-color: rgba(126, 177, 164, .35); text-decoration: none; transform: none; box-shadow: none; }
+    .admin-tabs a.is-active { color: #f2efe7; background: #26796d; box-shadow: 0 5px 12px rgba(38, 121, 109, .28); }
+    section { scroll-margin-top: 88px; }
+    .section-heading { display: flex; justify-content: space-between; align-items: end; gap: 16px; margin-bottom: 16px; }
+    .section-heading h2 { margin: 0; }
+    .filter-bar { display: flex; align-items: center; gap: 8px; margin: 18px 0; padding: 10px; background: rgba(9, 19, 18, .42); border: 1px solid rgba(126, 177, 164, .18); border-radius: 8px; }
+    .filter-bar input, .filter-bar select { width: auto; min-width: 180px; margin: 0; padding: 9px 10px; border: 1px solid #38504c; border-radius: 6px; background: #162725; color: #ecf3f1; }
+    .filter-bar button, .filter-bar a { padding: 9px 12px; font: 700 .8rem Arial, sans-serif; }
+    .expiry { display: block; margin-top: 5px; color: #a9bfba; font-size: .76rem; }
+    .stat { transition: border-color .18s ease, transform .18s ease; }
+    .stat:hover { border-color: #58b8a5; transform: translateY(-3px); }
+    .stat strong { display: block; font-size: 1.8rem; margin-top: 8px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 11px 8px; border-bottom: 1px solid #38504c; }
+    tbody tr { transition: background .18s ease; }
+    tbody tr:hover { background: rgba(53, 160, 143, .1); }
+    .status { display: inline-block; padding: 4px 8px; border-radius: 999px; text-transform: capitalize; font-size: .82rem; background: #5b4630; color: #ffdca8; }
+    .status.active { background: #174f43; color: #9af0d7; }
+    .muted { color: #a9bfba; }
+    .table-wrap { overflow-x: auto; }
+    .action { min-width: 150px; white-space: normal; vertical-align: top; }
+    .action-menu { position: relative; display: inline-block; }
+    .action-menu summary { list-style: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; color: #dcebe7; background: #225f57; border: 1px solid #4a8e82; border-radius: 7px; cursor: pointer; font-size: 1.25rem; line-height: 1; }
+    .action-menu summary::-webkit-details-marker { display: none; }
+    .action-menu summary:hover, .action-menu[open] summary { background: #35a08f; }
+    .action-menu-items { position: absolute; right: 0; top: calc(100% + 6px); z-index: 10; display: grid; min-width: 170px; padding: 6px; background: #172a28; border: 1px solid #4a6d66; border-radius: 8px; box-shadow: 0 12px 24px rgba(0, 0, 0, .35); }
+    .action-menu-items a, .action-menu-items button { display: block; width: 100%; box-sizing: border-box; padding: 9px 10px; color: #e8f2ef; background: transparent; border: 0; border-radius: 5px; text-align: left; font: 700 .78rem Arial, sans-serif; box-shadow: none; }
+    .action-menu-items a:hover, .action-menu-items button:hover { background: rgba(53, 160, 143, .2); transform: none; box-shadow: none; }
+    .action-menu-items .danger-action { color: #ffb5aa; }
+    .action-menu-items .danger-action:hover { background: rgba(196, 81, 69, .2); }
+    .flash { padding: 12px 15px; margin: 18px 0; border: 1px solid #4b8c7b; border-radius: 7px; background: #173c35; color: #b9f4e4; animation: appear .25s ease-out; }
+    @keyframes appear { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+    @media (max-width: 700px) {
+      body { padding: 12px; }
+      main { width: 100%; }
+      header { align-items: stretch; flex-direction: column; }
+      header > a { text-align: center; }
+      h1 { font-size: 1.65rem; }
+      section, .stat { padding: 14px; }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: 18px 0; }
+      .admin-tabs { top: 8px; margin: 16px 0; overflow-x: auto; }
+      .admin-tabs a { flex: 0 0 auto; white-space: nowrap; padding: 10px 12px; }
+      .section-heading, .filter-bar { align-items: stretch; flex-direction: column; }
+      .filter-bar input, .filter-bar select, .filter-bar button, .filter-bar a { width: 100%; box-sizing: border-box; }
+      .stat { font-size: .9rem; }
+      .stat strong { font-size: 1.45rem; }
+      .table-wrap { overflow: visible; }
+      table, tbody, tr, td { display: block; width: 100%; box-sizing: border-box; }
+      thead { display: none; }
+      tbody tr { margin: 12px 0; padding: 8px 0; border: 1px solid #38504c; border-radius: 7px; background: rgba(17, 28, 27, .45); }
+      tbody td { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding: 9px 11px; border-bottom: 1px solid rgba(56, 80, 76, .65); text-align: right; }
+      tbody td:last-child { border-bottom: 0; }
+      tbody td::before { content: attr(data-label); color: #a9bfba; font-weight: 700; text-align: left; }
+      tbody td:first-child { display: block; text-align: left; }
+      tbody td:first-child::before { display: none; }
+      .action { min-width: 0; }
+      .action-menu { width: 100%; }
+      .action-menu summary { margin-left: auto; }
+      .action-menu-items { left: 0; right: auto; width: 100%; box-sizing: border-box; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div><p>Super admin</p><h1>BomaManager overview</h1></div>
+      <a href="{{ url_for('admin.admin_logout') }}">Log out</a>
+    </header>
+    <nav class="admin-tabs" aria-label="Admin dashboard sections">
+      <span class="admin-tabs-label">Control center</span>
+      <a href="#overview" class="is-active">Overview</a>
+      <a href="#landlords">Landlord portfolios</a>
+      <a href="#payments">Recent payments</a>
+      <a href="#audit">Audit log</a>
+    </nav>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+    <div class="stats" id="overview">
+      <div class="stat">Landlords<strong>{{ total_landlords }}</strong></div>
+      <div class="stat">Properties<strong>{{ total_properties }}</strong></div>
+      <div class="stat">Rooms<strong>{{ total_rooms }}</strong></div>
+      <div class="stat">Tenants<strong>{{ total_tenants }}</strong></div>
+      <div class="stat">Occupied rooms<strong>{{ occupied_rooms }}</strong></div>
+    </div>
+    <section id="landlords">
+      <div class="section-heading">
+        <div><h2>Landlord portfolios</h2><p class="muted">Open a landlord to inspect their properties, rooms, tenants, and payments.</p></div>
+        <span class="muted">{{ landlord_rows|length }} shown</span>
+      </div>
+      <form method="GET" class="filter-bar" aria-label="Filter landlords">
+        <input type="search" name="q" value="{{ search }}" placeholder="Search name or email" aria-label="Search landlords">
+        <select name="status" aria-label="Filter subscription status">
+          <option value="all"{% if status == 'all' %} selected{% endif %}>All subscriptions</option>
+          <option value="active"{% if status == 'active' %} selected{% endif %}>Active</option>
+          <option value="trial"{% if status == 'trial' %} selected{% endif %}>Trial</option>
+          <option value="expired"{% if status == 'expired' %} selected{% endif %}>Expired</option>
+        </select>
+        <button type="submit">Filter</button>
+        {% if search or status != 'all' %}<a href="{{ url_for('admin.admin_dashboard') }}">Clear</a>{% endif %}
+      </form>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Landlord</th><th>Subscription action</th><th>Subscription</th><th>Properties</th><th>Rooms</th><th>Occupied</th><th>Tenants</th></tr></thead>
+        <tbody>
+        {% for row in landlord_rows %}
+          <tr>
+            <td><strong>{{ row.user.name or 'Unnamed landlord' }}</strong><br><span class="muted">{{ row.user.email }}</span></td>
+            <td class="action" data-label="Actions">
+              <details class="action-menu">
+                <summary aria-label="Actions for {{ row.user.name or row.user.email }}"><span aria-hidden="true">&#8942;</span></summary>
+                <div class="action-menu-items">
+                  <a href="{{ url_for('admin.landlord_detail', user_id=row.user.id) }}">View details</a>
+                  <form method="POST" action="{{ url_for('admin.toggle_landlord', user_id=row.user.id) }}">
+                  <input type="hidden" name="next" value="{{ url_for('admin.admin_dashboard') }}">
+                  {% if row.user.subscription_status == 'active' %}
+                  <button type="submit">Deactivate</button>
+                  {% else %}
+                  <button type="submit">Activate</button>
+                  {% endif %}
+                  </form>
+                  <form method="POST" action="{{ url_for('admin.reset_landlord_password', user_id=row.user.id) }}" onsubmit="return confirm('Generate a temporary password for this landlord? They will be required to create a new password after logging in.');">
+                    <button type="submit">Reset password</button>
+                  </form>
+                  <form method="POST" action="{{ url_for('admin.delete_landlord', user_id=row.user.id) }}" onsubmit="return confirm('Remove this landlord, their properties, rooms, tenants, bills, and payment records?');">
+                    <button type="submit" class="danger-action">Remove landlord</button>
+                  </form>
+                </div>
+              </details>
+            </td>
+            <td data-label="Subscription"><span class="status {{ row.user.subscription_status }}">{{ row.user.subscription_status }}</span><br><span class="muted">{{ row.user.subscription_plan }}</span>{% if row.user.subscription_expiry %}<span class="expiry">Until {{ row.user.subscription_expiry.strftime('%d %b %Y') }}</span>{% endif %}</td>
+            <td data-label="Properties">{{ row.property_count }}</td>
+            <td data-label="Rooms">{{ row.room_count }}</td>
+            <td data-label="Occupied">{{ row.occupied_count }}</td>
+            <td data-label="Tenants">{{ row.tenant_count }}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7">No landlords registered yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+    </section>
+    <section id="payments">
+      <h2>Recent payments</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Date</th><th>Amount</th><th>M-Pesa code</th></tr></thead>
+        <tbody>
+        {% for payment in recent_payments %}
+          <tr><td data-label="Date">{{ payment.date_paid }}</td><td data-label="Amount">Ksh {{ payment.amount }}</td><td data-label="M-Pesa code">{{ payment.mpesa_code or '-' }}</td></tr>
+        {% else %}
+          <tr><td colspan="3">No payments recorded yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+    </section>
+    <section id="audit">
+      <h2>Admin audit log</h2>
+      <p class="muted">Recent subscription and account actions.</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Time</th><th>Action</th><th>Landlord</th><th>Admin</th></tr></thead>
+        <tbody>
+        {% for log in audit_logs %}
+          <tr><td data-label="Time">{{ log.created_at.strftime('%d %b %Y, %H:%M') }}</td><td data-label="Action">{{ log.action }}</td><td data-label="Landlord">{{ log.target_email }}</td><td data-label="Admin">{{ log.admin_email }}</td></tr>
+        {% else %}
+          <tr><td colspan="4">No admin actions recorded yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table></div>
+    </section>
+  </main>
+  <script>
+    document.querySelectorAll('.admin-tabs a').forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        document.querySelectorAll('.admin-tabs a').forEach(function (item) {
+          item.classList.remove('is-active');
+        });
+        tab.classList.add('is-active');
+      });
+    });
+  </script>
+</body>
+</html>

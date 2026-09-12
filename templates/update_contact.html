@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Update Contact Number - BomaManager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+<body>
+<div class="container">
+    <h1>Update Your Contact Number</h1>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}<div class="flash">{{ messages[0] }}</div>{% endif %}
+    {% endwith %}
+    <form method="POST">
+        <label for="contact_number">Contact number</label>
+        <input type="tel" name="contact_number" id="contact_number" value="{{ current_user.contact_number or '' }}" placeholder="e.g. 0712345678" maxlength="30" {% if current_user.role == 'tenant' %}required{% endif %}>
+        <button type="submit">Save Contact</button>
+    </form>
+    <p><a href="{{ url_for('dashboard') }}">Back to dashboard</a></p>
+</div>
+</body>
+</html>

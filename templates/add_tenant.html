@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Add Tenant - BomaManager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+<body>
+<div class="container auth-shell">
+    <div class="auth-card">
+        <h1>Add Tenant</h1>
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash">{{ messages[0] }}</div>
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST">
+            <label for="name">Tenant name</label>
+            <input type="text" id="name" name="name" placeholder="Full name" required>
+
+            <label for="email">Tenant email</label>
+            <input type="email" id="email" name="email" placeholder="tenant@email.com" required>
+
+            <label for="contact_number">Phone number</label>
+            <input type="tel" id="contact_number" name="contact_number" placeholder="0712345678" maxlength="30">
+
+            <button type="submit" class="btn primary-action">Create tenant account</button>
+        </form>
+
+        <p class="helper-text">
+            A temporary password will be created: <strong>temp123</strong>
+        </p>
+
+        <div class="auth-links">
+            <a href="{{ url_for('dashboard') }}">Back to dashboard</a>
+        </div>
+    </div>
+</div>
+</body>
+</html>

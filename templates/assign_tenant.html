@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Assign Tenant - BomaManager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+<body>
+<div class="container">
+    <h1>Assign Tenant to Room {{ room.room_number }}</h1>
+    <h1>Add New Tenant</h1>
+<form method="POST">
+    <input name="name" placeholder="Tenant Full Name" required>
+    <input name="email" type="email" placeholder="Tenant Email" required>
+    <button type="submit">Add Tenant</button>
+</form>
+    <form method="POST">
+        <select name="tenant_id" required>
+            <option value="">Select Tenant</option>
+            {% for t in tenants %}
+            <option value="{{ t.id }}">{{ t.email }}</option>
+            {% endfor %}
+        </select>
+        <label for="assigned_date">Room assignment date</label>
+        <input type="date" name="assigned_date" id="assigned_date" value="{{ today }}" required>
+        <button type="submit">Assign</button>
+    </form>
+</div>
+</body>
+</html>
