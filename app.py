@@ -435,8 +435,9 @@ def maintenance_check(f):
 # ==================== AUTH ROUTES ====================
 @app.route('/admin/toggle-maintenance', methods=['POST'])
 def toggle_maintenance():
-    if session.get('role') != 'super_admin':
+    if not session.get('is_super_admin'):
         return "Unauthorized", 403
+    session['role'] = 'super_admin'
     current = is_maintenance_on()
     set_maintenance(not current)
     return redirect(url_for('admin.admin_dashboard'))
