@@ -45,6 +45,7 @@ def admin_login():
 @admin_required
 def admin_dashboard():
     from app import AuditLog, Payment, Property, Room, User, db
+    from maintenance import is_maintenance_on
 
     search = request.args.get('q', '').strip()
     status = request.args.get('status', 'all').strip().lower()
@@ -83,7 +84,8 @@ def admin_dashboard():
                          recent_payments=recent_payments,
                          audit_logs=audit_logs,
                          search=search,
-                         status=status)
+                         status=status,
+                         maintenance=is_maintenance_on())
 
 @admin_bp.route('/admin/landlord/<int:user_id>')
 @admin_required

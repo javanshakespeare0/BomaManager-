@@ -6,7 +6,8 @@ import re
 import secrets
 from datetime import datetime, date, timedelta
 from functools import wraps
-
+from maintenance import is_maintenance_on, set_maintenance
+from functools import wraps
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # Only for http://localhost testing
 
 try:
@@ -412,8 +413,27 @@ def get_payment_summary(room, period_key):
         'total_paid': total_paid,
         'balance': max(0, total_amount - total_paid),
     }
-
+def maintenance_check(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        # Allow admin to still access
+        if is_maintenance_on() and not request.path.startswith('/admin'):
+            return render_template('maintenance.html'), 503
+        return f(*args, **kwargs)
+    return decorated
 # ==================== AUTH ROUTES ====================
+@app.route('/admin/toggle-maintenance', methods=['POST'])
+def toggle_maintenance():
+    if 'is_super_admin' not in session:
+        return redirect(url_for('admin.admin_login'))
+    current = is_maintenance_on()
+    set_maintenance(not current)
+    return redirect(url_for('admin.admin_dashboard'))
+
+@app.route('/admin/maintenance-status')
+def maintenance_status():
+    return {"maintenance": is_maintenance_on()}
+
 @app.route('/')
 def home():
     return redirect(url_for('login'))

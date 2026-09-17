@@ -34,6 +34,9 @@
     .status { display: inline-block; padding: 4px 8px; border-radius: 999px; text-transform: capitalize; font-size: .82rem; background: #5b4630; color: #ffdca8; }
     .status.active { background: #174f43; color: #9af0d7; }
     .muted { color: #a9bfba; }
+    .maintenance-toggle { color: #fff; padding: 10px 20px; border: none; border-radius: 6px; }
+    .maintenance-toggle.is-on { background: green; }
+    .maintenance-toggle.is-off { background: red; }
     .table-wrap { overflow-x: auto; }
     .action { min-width: 150px; white-space: normal; vertical-align: top; }
     .action-menu { position: relative; display: inline-block; }
@@ -81,7 +84,14 @@
   <main>
     <header>
       <div><p>Super admin</p><h1>BomaManager overview</h1></div>
-      <a href="{{ url_for('admin.admin_logout') }}">Log out</a>
+      <div>
+        <form action="/admin/toggle-maintenance" method="POST" style="display:inline-block;margin-right:8px">
+          <button type="submit" class="maintenance-toggle {% if maintenance %}is-on{% else %}is-off{% endif %}">
+            {% if maintenance %}Disable Maintenance{% else %}Enable Maintenance Mode{% endif %}
+          </button>
+        </form>
+        <a href="{{ url_for('admin.admin_logout') }}">Log out</a>
+      </div>
     </header>
     <nav class="admin-tabs" aria-label="Admin dashboard sections">
       <span class="admin-tabs-label">Control center</span>
