@@ -11,3 +11,9 @@ def turn_on_maintenance():
 def turn_off_maintenance():
     if os.path.exists(MAINT_FILE):
         os.remove(MAINT_FILE)
+
+def set_maintenance(enabled):
+    if enabled:
+        turn_on_maintenance()
+    else:
+        turn_off_maintenance()
