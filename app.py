@@ -113,6 +113,17 @@ def check_subscription_global():
     if request.endpoint in allowed_endpoints:
         return None
     return redirect(url_for('subscription_page'))
+
+@app.before_request
+def enforce_maintenance_mode():
+    if not is_maintenance_on() or session.get('role') == 'super_admin':
+        return None
+    if request.path.startswith('/admin'):
+        return None
+    if request.endpoint in {'login', 'logout', 'register', 'google_login', 'static'}:
+        return None
+    return render_template('maintenance.html'), 503
+
 # ==================== MODELS ====================
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
