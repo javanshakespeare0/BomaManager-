@@ -37,14 +37,9 @@
     {% if paid %}
         <div class="flash">This billing period is fully paid ✅</div>
     {% else %}
-        {% if landlord.mpesa_till %}
         <div class="property-card">
             <h3>Pay with M-Pesa</h3>
-            {% if landlord.mpesa_type in ['till', 'paybill'] %}
-                <p>You will receive an STK Push. The current Daraja setup receives the payment first and must be configured with a B2C disbursement before funds can be forwarded automatically.</p>
-            {% else %}
-                <p>Use the landlord's M-Pesa details above to send the payment manually, then keep your confirmation message.</p>
-            {% endif %}
+            <p>Enter your phone number and you will receive an STK Push to authorize the payment. The payment is received through the platform and forwarded to the landlord's configured destination.</p>
             <form method="POST" action="{{ url_for('stk_push', room_id=room.id) }}">
                 <label for="amount">Amount to pay (Ksh)</label>
                 <input type="number" name="amount" id="amount" min="1" max="{{ balance }}" step="0.01" placeholder="Up to Ksh {{ balance }}" required>
@@ -54,7 +49,6 @@
                 <button type="submit">Pay selected amount</button>
             </form>
         </div>
-        {% endif %}
         {% if landlord.bank_name and landlord.account_number %}
             <div class="property-card">
                 <h3>Pay by bank transfer</h3>

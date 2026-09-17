@@ -1150,22 +1150,11 @@ def stk_push(room_id):
         return "Access Denied"
 
     landlord = room.property.landlord
-    if not landlord or not landlord.mpesa_till:
-        flash('Your landlord has not set an M-Pesa destination yet.')
+    if not landlord:
+        flash('This room is not linked to a landlord.')
         return redirect(url_for('pay_rent', room_id=room_id))
 
-    # Manual methods - no STK
-    if landlord.mpesa_type in ['send_money', 'pochi', 'bank']:
-        if landlord.mpesa_type == 'send_money':
-            flash(f'Send Ksh {room.rent_amount} to {landlord.mpesa_till} ({landlord.name}) via M-Pesa > Send Money, then click "I Have Paid"')
-        elif landlord.mpesa_type == 'pochi':
-            flash(f'Send Ksh {room.rent_amount} to Pochi la Biashara number {landlord.mpesa_till}, then keep your confirmation message.')
-        else:
-            flash(f'Deposit to Bank: {landlord.bank_name} Acc: {landlord.account_number} Branch: {landlord.bank_branch if hasattr(landlord, "bank_branch") else ""}')
-        return redirect(url_for('pay_rent', room_id=room_id))
-
-    # For demo/sandbox - STK will always use YOUR paybill 174379 to simulate
-    # In production, you would B2C the money to landlord after callback
+    # STK uses the platform Daraja shortcode; landlord payout details are separate.
     current_period = get_billing_period(room)
     if not current_period:
         flash('This room has no assignment date.')
@@ -1190,7 +1179,12 @@ def stk_push(room_id):
         return redirect(url_for('pay_rent', room_id=room_id))
 
     # IMPORTANT: Password must use YOUR shortcode + YOUR passkey, not landlord's till
-    access_token = get_access_token()
+    try:
+        access_token = get_access_token()
+    except (requests.RequestException, KeyError, ValueError) as error:
+        print(f'STK access-token error: {error}')
+        flash('M-Pesa is temporarily unavailable. Please try again shortly.')
+        return redirect(url_for('pay_rent', room_id=room_id))
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
     password = base64.b64encode((BUSINESS_SHORTCODE + PASSKEY + timestamp).encode()).decode('utf-8')
 
@@ -1212,8 +1206,13 @@ def stk_push(room_id):
     }
     
     headers = {"Authorization": f"Bearer {access_token}"}
-    response = requests.post("https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest", json=payload, headers=headers)
-    data = response.json()
+    try:
+        response = requests.post("https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest", json=payload, headers=headers, timeout=20)
+        data = response.json()
+    except (requests.RequestException, ValueError) as error:
+        print(f'STK request error: {error}')
+        flash('M-Pesa is temporarily unavailable. Please try again shortly.')
+        return redirect(url_for('pay_rent', room_id=room_id))
     print("STK Response:", data)
 
     if data.get('ResponseCode') == '0':
