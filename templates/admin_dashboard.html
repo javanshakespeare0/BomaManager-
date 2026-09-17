@@ -82,14 +82,19 @@
 </head>
 <body>
   <main>
+    <!-- Maintenance Toggle - Always visible for super admin -->
+    <div style="margin: 20px 0; padding: 15px; border: 2px dashed red;">
+      <h3>System Control</h3>
+      <p>Current: {% if maintenance %} <span style="color:red">MAINTENANCE ON</span> {% else %} <span style="color:green">LIVE</span> {% endif %}</p>
+      <form action="/admin/toggle-maintenance" method="POST">
+        <button type="submit" class="maintenance-toggle {% if maintenance %}is-on{% else %}is-off{% endif %}" style="padding:12px 25px; border-radius:8px; font-weight:bold;">
+          {% if maintenance %}✅ Disable Maintenance{% else %}🔧 Enable Maintenance Mode{% endif %}
+        </button>
+      </form>
+    </div>
     <header>
       <div><p>Super admin</p><h1>BomaManager overview</h1></div>
       <div>
-        <form action="/admin/toggle-maintenance" method="POST" style="display:inline-block;margin-right:8px">
-          <button type="submit" class="maintenance-toggle {% if maintenance %}is-on{% else %}is-off{% endif %}">
-            {% if maintenance %}Disable Maintenance{% else %}Enable Maintenance Mode{% endif %}
-          </button>
-        </form>
         <a href="{{ url_for('admin.admin_logout') }}">Log out</a>
       </div>
     </header>

@@ -73,6 +73,7 @@ def admin_dashboard():
     occupied_rooms = Room.query.filter_by(is_occupied=True).count()
     recent_payments = Payment.query.order_by(Payment.date_paid.desc()).limit(20).all()
     audit_logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(12).all()
+    maintenance_state = is_maintenance_on()
 
     return render_template('admin_dashboard.html',
                          total_landlords=len(landlords),
@@ -85,7 +86,7 @@ def admin_dashboard():
                          audit_logs=audit_logs,
                          search=search,
                          status=status,
-                         maintenance=is_maintenance_on())
+                         maintenance=maintenance_state)
 
 @admin_bp.route('/admin/landlord/<int:user_id>')
 @admin_required
