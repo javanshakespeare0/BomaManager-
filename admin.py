@@ -35,6 +35,7 @@ def admin_login():
         password = request.form.get('password')
         if admin_credentials_valid(email, password):
             session['is_super_admin'] = True
+            session['role'] = 'super_admin'
             session['admin_email'] = email
             return redirect(url_for('admin.admin_dashboard'))
         else:
@@ -114,6 +115,7 @@ def landlord_detail(user_id):
 @admin_bp.route('/admin/logout')
 def admin_logout():
     session.pop('is_super_admin', None)
+    session.pop('role', None)
     session.pop('admin_email', None)
     return redirect(url_for('admin.admin_login'))
 
