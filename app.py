@@ -4,6 +4,7 @@ import calendar
 import os
 import re
 import secrets
+from mpesa import stk_push2
 from datetime import datetime, date, timedelta
 from functools import wraps
 from maintenance import is_maintenance_on, set_maintenance
@@ -25,18 +26,6 @@ except ModuleNotFoundError as e:
     print(f'Run: pip install {missing}')
     sys.exit(1)
 
-BUSINESS_SHORTCODE = "174379"
-PASSKEY = "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919"
-SUBSCRIPTION_CALLBACK_URL = "https://yourdomain.com/api/mpesa/callback/subscription"
-
-
-def get_access_token():
-    consumer_key = "YOUR_CONSUMER_KEY"
-    consumer_secret = "YOUR_CONSUMER_SECRET"
-    url = "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
-    r = requests.get(url, auth=(consumer_key, consumer_secret))
-    return r.json()['access_token']
-
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'bomamanager-secret-key-2026'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///bomamanager.db'
@@ -51,12 +40,19 @@ blueprint = make_google_blueprint(
 )
 app.register_blueprint(blueprint, url_prefix="/login")
 
-# M-PESA DARAJA CREDENTIALS
-CONSUMER_KEY = 'LWkA9I10JShdwhEDHNsSRmKrHDhq4RTNaBET1T6pYJNmwAZR'
-CONSUMER_SECRET = '1GsjhdGpk8IwxVQHfGTNLwJCgyrGGpXkSfCJPGGztwtE5NlyVepinfO9jdGWIojO'
-BUSINESS_SHORTCODE = '174379'
-PASSKEY = 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919'
-CALLBACK_URL = 'https://tracks-dark-members-trackback.trycloudflare.com/api/mpesa/callback'
+# M-PESA DARAJA CONFIGURATION. Production values must be supplied through the
+# environment; the defaults keep the existing sandbox setup usable locally.
+DARAJA_ENV = os.getenv('DARAJA_ENV', 'sandbox').lower()
+DARAJA_BASE_URL = 'https://api.safaricom.co.ke' if DARAJA_ENV == 'production' else 'https://sandbox.safaricom.co.ke'
+CONSUMER_KEY = os.getenv('MPESA_CONSUMER_KEY', 'LWkA9I10JShdwhEDHNsSRmKrHDhq4RTNaBET1T6pYJNmwAZR')
+CONSUMER_SECRET = os.getenv('MPESA_CONSUMER_SECRET', '1GsjhdGpk8IwxVQHfGTNLwJCgyrGGpXkSfCJPGGztE5NlyVepinfO9jdGWIojO')
+BUSINESS_SHORTCODE = os.getenv('MPESA_BUSINESS_SHORTCODE', '174379')
+PASSKEY = os.getenv('MPESA_PASSKEY', 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919')
+CALLBACK_URL = os.getenv('MPESA_CALLBACK_URL', 'https://your-public-domain.example/api/mpesa/callback')
+SUBSCRIPTION_CALLBACK_URL = os.getenv(
+    'MPESA_SUBSCRIPTION_CALLBACK_URL',
+    'https://your-public-domain.example/api/mpesa/callback/subscription',
+)
 
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
@@ -258,8 +254,9 @@ class AuditLog(db.Model):
 
 # ==================== HELPERS ====================
 def get_access_token():
-    api_url = "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
-    response = requests.get(api_url, auth=HTTPBasicAuth(CONSUMER_KEY, CONSUMER_SECRET))
+    api_url = f"{DARAJA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials"
+    response = requests.get(api_url, auth=HTTPBasicAuth(CONSUMER_KEY, CONSUMER_SECRET), timeout=20)
+    response.raise_for_status()
     return response.json()['access_token']
 
 def ensure_user_columns():
@@ -1174,41 +1171,21 @@ def stk_push(room_id):
 
     raw_phone = request.form.get('phone', '')
     phone = format_phone(raw_phone)
-    if len(phone) != 12:
-        flash("Invalid phone number. Use 07XXXXXXXX")
+    if not re.fullmatch(r'254(?:7|1)\d{8}', phone):
+        flash("Invalid phone number. Use 07XXXXXXXX or 01XXXXXXXX")
         return redirect(url_for('pay_rent', room_id=room_id))
 
-    # IMPORTANT: Password must use YOUR shortcode + YOUR passkey, not landlord's till
-    try:
-        access_token = get_access_token()
-    except (requests.RequestException, KeyError, ValueError) as error:
-        print(f'STK access-token error: {error}')
-        flash('M-Pesa is temporarily unavailable. Please try again shortly.')
+    if 'your-public-domain.example' in CALLBACK_URL:
+        flash('M-Pesa is not configured yet. Set MPESA_CALLBACK_URL to a public HTTPS callback URL.')
         return redirect(url_for('pay_rent', room_id=room_id))
-    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    password = base64.b64encode((BUSINESS_SHORTCODE + PASSKEY + timestamp).encode()).decode('utf-8')
 
-    # For Till vs Paybill
-    transaction_type = "CustomerBuyGoodsOnline" if landlord.mpesa_type == 'till' else "CustomerPayBillOnline"
-    
-    payload = {
-        "BusinessShortCode": BUSINESS_SHORTCODE,  # YOUR shortcode for STK
-        "Password": password,
-        "Timestamp": timestamp,
-        "TransactionType": transaction_type,
-        "Amount": int(requested_amount),
-        "PartyA": phone,
-        "PartyB": BUSINESS_SHORTCODE, # Money comes to YOU first in demo
-        "PhoneNumber": phone,
-        "CallBackURL": CALLBACK_URL,
-        "AccountReference": f"Room{room.room_number}_Landlord{landlord.id}", # Track who it's for
-        "TransactionDesc": f"Rent {room.property.name} for {landlord.name}"
-    }
-    
-    headers = {"Authorization": f"Bearer {access_token}"}
     try:
-        response = requests.post("https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest", json=payload, headers=headers, timeout=20)
-        data = response.json()
+        data = stk_push2(
+            phone,
+            requested_amount,
+            account_reference=f"Room{room.room_number}_Landlord{landlord.id}",
+            description=f"Rent {room.property.name} for {landlord.name}",
+        )
     except (requests.RequestException, ValueError) as error:
         print(f'STK request error: {error}')
         flash('M-Pesa is temporarily unavailable. Please try again shortly.')
@@ -1218,7 +1195,8 @@ def stk_push(room_id):
     if data.get('ResponseCode') == '0':
         flash(f"STK Push sent to {phone}. Check phone to pay Ksh {requested_amount}. Money will be forwarded to landlord's {landlord.mpesa_type}: {landlord.mpesa_till}")
     else:
-        flash(f"STK failed: {data.get('errorMessage', data)}")
+        message = data.get('errorMessage') or data.get('ResponseDescription') or 'M-Pesa rejected the request.'
+        flash(f"STK failed: {message}")
     
     return redirect(url_for('dashboard'))
 
