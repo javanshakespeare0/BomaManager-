@@ -6,7 +6,7 @@ import requests
 from requests.auth import HTTPBasicAuth
 
 
-DARAJA_ENV = os.getenv('DARAJA_ENV', 'sandbox').lower()
+DARAJA_ENV = os.getenv('DARAJA_ENV', os.getenv('MPESA_ENV', 'sandbox')).lower()
 DARAJA_BASE_URL = (
     'https://api.safaricom.co.ke'
     if DARAJA_ENV == 'production'
@@ -50,7 +50,10 @@ def stk_push2(
     if not token_response.ok:
         detail = token_response.text.strip() or f'HTTP {token_response.status_code}'
         raise requests.HTTPError(f'Daraja token request failed: {detail}')
-    access_token = token_response.json()['access_token']
+    try:
+        access_token = token_response.json()['access_token']
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError('Daraja token response did not contain an access token') from error
 
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
     password = base64.b64encode(
@@ -78,4 +81,7 @@ def stk_push2(
     if not response.ok:
         detail = response.text.strip() or f'HTTP {response.status_code}'
         raise requests.HTTPError(f'Daraja STK request failed: {detail}')
-    return response.json()
+    try:
+        return response.json()
+    except ValueError as error:
+        raise ValueError('Daraja STK response was not valid JSON') from error

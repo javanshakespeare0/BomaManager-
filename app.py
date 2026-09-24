@@ -1239,7 +1239,7 @@ def stk_push(room_id):
         return redirect(url_for('pay_rent', room_id=room_id))
     print("STK Response:", data)
 
-    if data.get('ResponseCode') == '0':
+    if str(data.get('ResponseCode')) == '0':
         checkout_request_id = data.get('CheckoutRequestID')
         if not checkout_request_id:
             app.logger.error('Daraja accepted STK request without CheckoutRequestID: %s', data)
