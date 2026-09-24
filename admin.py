@@ -3,15 +3,17 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from datetime import datetime, timedelta
 import secrets
+import os
 from sqlalchemy import or_
 
 admin_bp = Blueprint('admin', __name__)
 
-ADMIN_EMAIL = "javanshakespeare0@gmail.com"
-ADMIN_PASSWORD_HASH = generate_password_hash("@tha_admin#")
+ADMIN_EMAIL = os.getenv('ADMIN_EMAIL', '').strip().lower()
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', '')
+ADMIN_PASSWORD_HASH = generate_password_hash(ADMIN_PASSWORD) if ADMIN_PASSWORD else None
 
 def admin_credentials_valid(email, password):
-    return email == ADMIN_EMAIL and check_password_hash(ADMIN_PASSWORD_HASH, password)
+    return bool(ADMIN_PASSWORD_HASH) and email.strip().lower() == ADMIN_EMAIL and check_password_hash(ADMIN_PASSWORD_HASH, password)
 
 def admin_required(f):
     @wraps(f)

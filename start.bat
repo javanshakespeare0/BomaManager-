@@ -1,5 +1,6 @@
 @echo off
 REM Activate venv (cmd) and run app
+set APP_ENV=development
 if exist .venv\Scripts\activate.bat (
     call .venv\Scripts\activate.bat
     python app.py

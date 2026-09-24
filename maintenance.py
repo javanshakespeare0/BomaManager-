@@ -1,5 +1,6 @@
 import os
-MAINT_FILE = "maintenance_on.txt"
+
+MAINT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "maintenance_on.txt")
 
 def is_maintenance_on():
     return os.path.exists(MAINT_FILE)

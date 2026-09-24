@@ -1,4 +1,5 @@
 # PowerShell script to activate venv and run app
+$env:APP_ENV = 'development'
 if (Test-Path -Path .\.venv\Scripts\Activate.ps1) {
     . .\.venv\Scripts\Activate.ps1
     python app.py

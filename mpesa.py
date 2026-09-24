@@ -22,30 +22,50 @@ CALLBACK_URL = os.getenv(
 )
 
 
-def stk_push2(phone, amount, account_reference='BomaManager', description='Rent payment'):
+def stk_push2(
+    phone,
+    amount,
+    account_reference='BomaManager',
+    description='Rent payment',
+    consumer_key=None,
+    consumer_secret=None,
+    business_shortcode=None,
+    passkey=None,
+    callback_url=None,
+):
     """Send an STK Push and return Daraja's decoded response."""
+    consumer_key = consumer_key or CONSUMER_KEY
+    consumer_secret = consumer_secret or CONSUMER_SECRET
+    business_shortcode = business_shortcode or BUSINESS_SHORTCODE
+    passkey = passkey or PASSKEY
+    callback_url = callback_url or CALLBACK_URL
+    if not all((consumer_key, consumer_secret, business_shortcode, passkey)):
+        raise ValueError('M-Pesa Daraja credentials are not configured')
+
     token_response = requests.get(
         f'{DARAJA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials',
-        auth=HTTPBasicAuth(CONSUMER_KEY, CONSUMER_SECRET),
+        auth=HTTPBasicAuth(consumer_key, consumer_secret),
         timeout=20,
     )
-    token_response.raise_for_status()
+    if not token_response.ok:
+        detail = token_response.text.strip() or f'HTTP {token_response.status_code}'
+        raise requests.HTTPError(f'Daraja token request failed: {detail}')
     access_token = token_response.json()['access_token']
 
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
     password = base64.b64encode(
-        f'{BUSINESS_SHORTCODE}{PASSKEY}{timestamp}'.encode()
+        f'{business_shortcode}{passkey}{timestamp}'.encode()
     ).decode()
     payload = {
-        'BusinessShortCode': BUSINESS_SHORTCODE,
+        'BusinessShortCode': business_shortcode,
         'Password': password,
         'Timestamp': timestamp,
         'TransactionType': 'CustomerPayBillOnline',
         'Amount': int(float(amount)),
         'PartyA': phone,
-        'PartyB': BUSINESS_SHORTCODE,
+        'PartyB': business_shortcode,
         'PhoneNumber': phone,
-        'CallBackURL': CALLBACK_URL,
+        'CallBackURL': callback_url,
         'AccountReference': account_reference,
         'TransactionDesc': description,
     }
@@ -55,5 +75,7 @@ def stk_push2(phone, amount, account_reference='BomaManager', description='Rent 
         headers={'Authorization': f'Bearer {access_token}'},
         timeout=20,
     )
-    response.raise_for_status()
+    if not response.ok:
+        detail = response.text.strip() or f'HTTP {response.status_code}'
+        raise requests.HTTPError(f'Daraja STK request failed: {detail}')
     return response.json()

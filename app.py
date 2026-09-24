@@ -8,8 +8,8 @@ from mpesa import stk_push2
 from datetime import datetime, date, timedelta
 from functools import wraps
 from maintenance import is_maintenance_on, set_maintenance
-from functools import wraps
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # Only for http://localhost testing
+if os.getenv('FLASK_ENV', 'production').lower() == 'development':
+    os.environ.setdefault('OAUTHLIB_INSECURE_TRANSPORT', '1')
 
 try:
     import requests
@@ -27,14 +27,22 @@ except ModuleNotFoundError as e:
     sys.exit(1)
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'bomamanager-secret-key-2026'
+APP_ENV = os.getenv('APP_ENV', 'production').lower()
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY') or (
+    secrets.token_hex(32) if APP_ENV != 'production' else None
+)
+if not app.config['SECRET_KEY']:
+    raise RuntimeError('SECRET_KEY must be configured in the environment')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///bomamanager.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = APP_ENV == 'production'
 
 # GOOGLE OAUTH SETUP
 blueprint = make_google_blueprint(
-    client_id="697782513202-citmqbn4u1r5rovt3hmpphsjtpaaj5cj.apps.googleusercontent.com",
-    client_secret="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",
+    client_id=os.getenv('GOOGLE_CLIENT_ID', ''),
+    client_secret=os.getenv('GOOGLE_CLIENT_SECRET', ''),
     scope=["openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"],
     redirect_to="google_login"
 )
@@ -42,12 +50,12 @@ app.register_blueprint(blueprint, url_prefix="/login")
 
 # M-PESA DARAJA CONFIGURATION. Production values must be supplied through the
 # environment; the defaults keep the existing sandbox setup usable locally.
-DARAJA_ENV = os.getenv('DARAJA_ENV', 'sandbox').lower()
+DARAJA_ENV = os.getenv('DARAJA_ENV', os.getenv('MPESA_ENV', 'sandbox')).lower()
 DARAJA_BASE_URL = 'https://api.safaricom.co.ke' if DARAJA_ENV == 'production' else 'https://sandbox.safaricom.co.ke'
-CONSUMER_KEY = os.getenv('MPESA_CONSUMER_KEY', 'LWkA9I10JShdwhEDHNsSRmKrHDhq4RTNaBET1T6pYJNmwAZR')
-CONSUMER_SECRET = os.getenv('MPESA_CONSUMER_SECRET', '1GsjhdGpk8IwxVQHfGTNLwJCgyrGGpXkSfCJPGGztE5NlyVepinfO9jdGWIojO')
+CONSUMER_KEY = os.getenv('MPESA_CONSUMER_KEY', '')
+CONSUMER_SECRET = os.getenv('MPESA_CONSUMER_SECRET', '')
 BUSINESS_SHORTCODE = os.getenv('MPESA_BUSINESS_SHORTCODE', '174379')
-PASSKEY = os.getenv('MPESA_PASSKEY', 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919')
+PASSKEY = os.getenv('MPESA_PASSKEY', '')
 CALLBACK_URL = os.getenv('MPESA_CALLBACK_URL', 'https://your-public-domain.example/api/mpesa/callback')
 SUBSCRIPTION_CALLBACK_URL = os.getenv(
     'MPESA_SUBSCRIPTION_CALLBACK_URL',
@@ -75,11 +83,7 @@ def subscription_required(f):
 
 
 def has_paid_subscription_access(user):
-    return (
-        user.subscription_status == 'active'
-        and user.subscription_expiry is not None
-        and user.subscription_expiry > datetime.utcnow()
-    )
+    return user.has_active_subscription()
 
 
 @app.before_request
@@ -116,7 +120,10 @@ def enforce_maintenance_mode():
         return None
     if request.path.startswith('/admin'):
         return None
-    if request.endpoint in {'login', 'logout', 'register', 'google_login', 'static'}:
+    if request.endpoint in {
+        'login', 'logout', 'register', 'google_login', 'static',
+        'mpesa_callback', 'subscription_callback',
+    }:
         return None
     return render_template('maintenance.html'), 503
 
@@ -219,6 +226,18 @@ class Payment(db.Model):
     room = db.relationship('Room', backref='payments')
     tenant = db.relationship('User', backref='payments', foreign_keys=[tenant_id])
 
+class PaymentAttempt(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    checkout_request_id = db.Column(db.String(100), unique=True, nullable=False)
+    room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
+    tenant_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    month = db.Column(db.String(20), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    cancelled = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    room = db.relationship('Room', backref='payment_attempts')
+    tenant = db.relationship('User', backref='payment_attempts', foreign_keys=[tenant_id])
+
 class WaterBill(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     units_used = db.Column(db.Float, nullable=False)
@@ -252,12 +271,21 @@ class AuditLog(db.Model):
     target_email = db.Column(db.String(150), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
+
+with app.app_context():
+    db.create_all()
+
 # ==================== HELPERS ====================
 def get_access_token():
+    if not CONSUMER_KEY or not CONSUMER_SECRET:
+        raise ValueError('M-Pesa consumer credentials are not configured')
     api_url = f"{DARAJA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials"
     response = requests.get(api_url, auth=HTTPBasicAuth(CONSUMER_KEY, CONSUMER_SECRET), timeout=20)
     response.raise_for_status()
-    return response.json()['access_token']
+    try:
+        return response.json()['access_token']
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError('Daraja token response did not contain an access token') from error
 
 def ensure_user_columns():
     columns = {column['name'] for column in inspect(db.engine).get_columns('user')}
@@ -347,6 +375,10 @@ def format_phone(phone):
     if not phone.startswith('254'):
         phone = '254' + phone
     return phone
+
+
+def valid_callback_url(callback_url):
+    return bool(callback_url) and callback_url.startswith('https://') and 'your-public-domain.example' not in callback_url
 
 
 def get_countdown_parts(target_datetime):
@@ -825,10 +857,14 @@ def mark_rent_unpaid(room_id):
         flash('This room has no assignment date.')
         return redirect(url_for('dashboard'))
     payments = Payment.query.filter_by(room_id=room.id, month=current_period['key']).all()
+    PaymentAttempt.query.filter_by(
+        room_id=room.id,
+        month=current_period['key'],
+        cancelled=False,
+    ).update({'cancelled': True}, synchronize_session=False)
     for payment in payments:
         db.session.delete(payment)
-    if payments:
-        db.session.commit()
+    db.session.commit()
     flash(f'Room {room.room_number} marked as not yet paid for {current_period["label"]}.')
     return redirect(url_for('dashboard'))
 
@@ -947,6 +983,7 @@ def delete_property(prop_id):
     for room in prop.rooms:
         Payment.query.filter_by(room_id=room.id).delete()
         WaterBill.query.filter_by(room_id=room.id).delete()
+        PendingBill.query.filter_by(room_id=room.id).delete()
         db.session.delete(room)
     db.session.delete(prop)
     db.session.commit()
@@ -978,6 +1015,7 @@ def delete_room(room_id):
         return "Access Denied"
     Payment.query.filter_by(room_id=room.id).delete()
     WaterBill.query.filter_by(room_id=room.id).delete()
+    PendingBill.query.filter_by(room_id=room.id).delete()
     db.session.delete(room)
     db.session.commit()
     flash('Room deleted!')
@@ -1130,8 +1168,12 @@ def update_assignment_date(room_id):
 @login_required
 @subscription_required
 def vacate_room(room_id):
-    if current_user.role!= 'landlord': return "Access Denied"
-    room = Room.query.get_or_404(room_id)
+    if current_user.role != 'landlord':
+        return "Access Denied", 403
+    room = Room.query.join(Property).filter(
+        Room.id == room_id,
+        Property.landlord_id == current_user.id,
+    ).first_or_404()
     room.tenant_id = None
     room.is_occupied = False
     room.assigned_date = None
@@ -1175,7 +1217,7 @@ def stk_push(room_id):
         flash("Invalid phone number. Use 07XXXXXXXX or 01XXXXXXXX")
         return redirect(url_for('pay_rent', room_id=room_id))
 
-    if 'your-public-domain.example' in CALLBACK_URL:
+    if not valid_callback_url(CALLBACK_URL):
         flash('M-Pesa is not configured yet. Set MPESA_CALLBACK_URL to a public HTTPS callback URL.')
         return redirect(url_for('pay_rent', room_id=room_id))
 
@@ -1185,14 +1227,32 @@ def stk_push(room_id):
             requested_amount,
             account_reference=f"Room{room.room_number}_Landlord{landlord.id}",
             description=f"Rent {room.property.name} for {landlord.name}",
+            consumer_key=CONSUMER_KEY,
+            consumer_secret=CONSUMER_SECRET,
+            business_shortcode=BUSINESS_SHORTCODE,
+            passkey=PASSKEY,
+            callback_url=CALLBACK_URL,
         )
     except (requests.RequestException, ValueError) as error:
         print(f'STK request error: {error}')
-        flash('M-Pesa is temporarily unavailable. Please try again shortly.')
+        flash(f'M-Pesa request failed: {error}')
         return redirect(url_for('pay_rent', room_id=room_id))
     print("STK Response:", data)
 
     if data.get('ResponseCode') == '0':
+        checkout_request_id = data.get('CheckoutRequestID')
+        if not checkout_request_id:
+            app.logger.error('Daraja accepted STK request without CheckoutRequestID: %s', data)
+            flash('M-Pesa did not return a valid checkout reference. Please try again.')
+            return redirect(url_for('pay_rent', room_id=room_id))
+        db.session.add(PaymentAttempt(
+            checkout_request_id=checkout_request_id,
+            room_id=room.id,
+            tenant_id=room.tenant_id,
+            month=current_period['key'],
+            amount=requested_amount,
+        ))
+        db.session.commit()
         flash(f"STK Push sent to {phone}. Check phone to pay Ksh {requested_amount}. Money will be forwarded to landlord's {landlord.mpesa_type}: {landlord.mpesa_till}")
     else:
         message = data.get('errorMessage') or data.get('ResponseDescription') or 'M-Pesa rejected the request.'
@@ -1209,9 +1269,15 @@ def mpesa_callback():
         stk_callback = data['Body']['stkCallback']
         result_code = stk_callback['ResultCode']
         result_desc = stk_callback.get('ResultDesc', '')
+        checkout_request_id = stk_callback.get('CheckoutRequestID')
+        attempt = PaymentAttempt.query.filter_by(checkout_request_id=checkout_request_id).first() if checkout_request_id else None
+
+        if attempt and attempt.cancelled:
+            app.logger.info('Ignoring callback for cancelled STK attempt %s', checkout_request_id)
+            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
 
         # 1. Payment failed / cancelled by user
-        if result_code!= 0:
+        if str(result_code) != '0':
             print(f"STK Failed: Code {result_code} - {result_desc}")
             return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
 
@@ -1241,7 +1307,10 @@ def mpesa_callback():
         elif account_ref.startswith("Room"):
             room_number = account_ref.replace("Room", "")
 
-        room = Room.query.filter_by(room_number=room_number).first()
+        room_query = Room.query.join(Property).filter(Room.room_number == room_number)
+        if landlord_id_from_ref is not None:
+            room_query = room_query.filter(Property.landlord_id == landlord_id_from_ref)
+        room = room_query.first()
 
         if not room:
             print(f"ERROR: Room {room_number} not found for ref {account_ref}")
@@ -1264,8 +1333,16 @@ def mpesa_callback():
             return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
 
         # 6. Save payment
+        if amount is None or not mpesa_code or room.tenant_id is None:
+            print(f"Invalid payment callback metadata for ref {account_ref}")
+            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
+
+        if attempt and (attempt.room_id != room.id or attempt.tenant_id != room.tenant_id):
+            app.logger.error('STK attempt ownership mismatch: %s', checkout_request_id)
+            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
+
         payment = Payment(
-            amount=amount,
+            amount=float(amount),
             month=month_key,
             room_id=room.id,
             tenant_id=room.tenant_id,
@@ -1278,8 +1355,8 @@ def mpesa_callback():
         landlord = room.property.landlord
         commission_rate = 0.05 # 5% - you keep this
 
-        commission = round(amount * commission_rate, 2)
-        to_landlord = round(amount - commission, 2)
+        commission = round(float(amount) * commission_rate, 2)
+        to_landlord = round(float(amount) - commission, 2)
 
         print(f"✅ Payment saved: Room {room_number} | {amount} | {mpesa_code}")
         print(f" → Belongs to Landlord {landlord.email} (ID: {landlord.id})")
@@ -1371,7 +1448,20 @@ def pay_subscription():
     session['pending_plan'] = plan
     session['pending_landlord_id'] = current_user.id
 
-    access_token = get_access_token()
+    if not PASSKEY or not CONSUMER_KEY or not CONSUMER_SECRET:
+        flash('M-Pesa is not configured yet. Set the Daraja credentials in the environment.', 'danger')
+        return redirect(url_for('subscription_page'))
+
+    try:
+        access_token = get_access_token()
+    except (requests.RequestException, ValueError) as error:
+        app.logger.error('Subscription Daraja token request failed: %s', error)
+        flash('M-Pesa is temporarily unavailable. Check the Daraja credentials and try again.', 'danger')
+        return redirect(url_for('subscription_page'))
+
+    if not valid_callback_url(SUBSCRIPTION_CALLBACK_URL):
+        flash('M-Pesa is not configured yet. Set MPESA_SUBSCRIPTION_CALLBACK_URL to a public HTTPS callback URL.', 'danger')
+        return redirect(url_for('subscription_page'))
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
     password = base64.b64encode((BUSINESS_SHORTCODE + PASSKEY + timestamp).encode()).decode('utf-8')
 
@@ -1389,7 +1479,7 @@ def pay_subscription():
         "TransactionDesc": f"BomaManager {plan} Subscription"
     }
 
-    url = "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest"
+    url = f"{DARAJA_BASE_URL}/mpesa/stkpush/v1/processrequest"
     headers = {"Authorization": f"Bearer {access_token}"}
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=20)
@@ -1400,7 +1490,7 @@ def pay_subscription():
         return redirect(url_for('subscription_page'))
 
     print('Subscription STK response:', response_data)
-    if response_data.get('ResponseCode') == '0':
+    if str(response_data.get('ResponseCode')) == '0':
         flash(f'STK Push sent to {phone} for Ksh {amount}. Enter your M-Pesa PIN.', 'success')
     else:
         message = response_data.get('errorMessage') or response_data.get('ResponseDescription') or 'M-Pesa rejected the request.'
@@ -1430,7 +1520,7 @@ def subscription_callback():
     print("SUB CALLBACK:", data)
     try:
         cb = data['Body']['stkCallback']
-        if cb['ResultCode'] != 0:
+        if str(cb['ResultCode']) != '0':
             return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
 
         meta = {i['Name']: i.get('Value') for i in cb['CallbackMetadata']['Item']}
