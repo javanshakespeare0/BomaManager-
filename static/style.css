@@ -527,3 +527,95 @@ html[data-theme="contrast"] input, html[data-theme="contrast"] select { backgrou
     .countdown-action { width: 100%; justify-content: space-between; }
     .countdown-grid { width: 100%; }
 }
+
+html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+}
+body {
+    min-width: 320px;
+    overflow-x: hidden;
+}
+img, video, iframe {
+    max-width: 100%;
+}
+button, input, select, textarea {
+    max-width: 100%;
+}
+.container, .property-card, .room-row, .overview-card, .tenant-row {
+    min-width: 0;
+}
+
+@media (max-width: 700px) {
+    body { padding: 8px; }
+    .container {
+        width: auto;
+        padding: 18px 14px;
+        border-radius: 16px;
+    }
+    h1 { font-size: clamp(1.55rem, 7vw, 2rem); overflow-wrap: anywhere; }
+    h2 { font-size: clamp(1.25rem, 5vw, 1.55rem); }
+    input, select, textarea { min-height: 44px; font-size: 16px; }
+    button, .btn { min-height: 44px; }
+    .auth-shell {
+        min-height: calc(100svh - 28px);
+        padding: 14px 4px;
+    }
+    .auth-card { padding: 22px 18px; border-radius: 16px; }
+    .dashboard-header { padding: 18px 16px; }
+    .dashboard-header > div:first-child { min-width: 0; }
+    .dashboard-header-actions { align-items: stretch; }
+    .theme-control { justify-content: space-between; }
+    .dashboard-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        padding: 10px;
+    }
+    .dashboard-actions .btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 0;
+        min-height: 46px;
+        padding: 9px 8px;
+        text-align: center;
+        line-height: 1.25;
+        overflow-wrap: anywhere;
+    }
+    .section-heading { align-items: flex-start; }
+    .section-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .section-actions .btn { flex: 1 1 auto; text-align: center; }
+    .property-card { padding: 16px 14px; }
+    .property-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .property-actions .btn, .room-actions .btn { min-width: 0; }
+    .room-actions { justify-content: stretch; }
+    .room-actions > a, .room-actions > form { flex: 1 1 130px; }
+    .room-actions > a { text-align: center; }
+    .room-actions form button { width: 100%; }
+    .room-details span, .tenant-row, .property-card { overflow-wrap: anywhere; }
+    .tenant-row { padding: 13px 14px; }
+    .payment-record-header { align-items: flex-start; flex-direction: column; }
+    .collection-summary { padding: 18px 16px; }
+    .collection-row { gap: 12px; }
+    .collection-row strong { text-align: right; }
+    .table-wrap {
+        max-width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .table-wrap table { min-width: 560px; }
+    .countdown-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .countdown-action { align-items: stretch; flex-direction: column; }
+    .countdown-action .btn { text-align: center; }
+}
+
+@media (max-width: 380px) {
+    .container { padding: 16px 12px; }
+    .dashboard-actions { grid-template-columns: 1fr; }
+    .overview-grid, .tenant-summary-grid { grid-template-columns: 1fr; }
+    .dashboard-header-actions { flex-direction: column; }
+    .theme-control select { flex: 1; }
+    .property-actions { grid-template-columns: 1fr; }
+    .settings-card { padding: 20px 16px; }
+}
