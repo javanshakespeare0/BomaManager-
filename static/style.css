@@ -1011,17 +1011,22 @@ body.landlord-dashboard-page {
     .landlord-dashboard .room-quick-actions {
         flex: 1 1 100%;
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: minmax(0, 1fr);
         align-items: stretch;
         justify-content: stretch;
         gap: 8px;
     }
     .landlord-dashboard .room-quick-actions > a,
-    .landlord-dashboard .room-quick-actions > form { min-width: 0; }
+    .landlord-dashboard .room-quick-actions > form {
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 0;
+    }
     .landlord-dashboard .room-quick-actions .btn {
         display: flex;
         align-items: center;
         justify-content: center;
+        box-sizing: border-box;
         width: 100%;
         min-height: 44px;
         padding: 8px 9px;
@@ -1029,7 +1034,7 @@ body.landlord-dashboard-page {
         text-align: center;
         line-height: 1.2;
     }
-    .landlord-dashboard .room-quick-actions > form { grid-column: 1 / -1; }
+    .landlord-dashboard .room-quick-actions > form { grid-column: 1; }
 }
 @media (max-width: 380px) {
     .landlord-dashboard { padding: 11px; }
