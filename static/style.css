@@ -939,6 +939,27 @@ body.landlord-dashboard-page {
 .landlord-dashboard .unpaid-badge { background: #fff0e8; color: #a4512b !important; }
 .landlord-dashboard .pending-bill-pill { background: #fff5df; color: #805b1d; }
 .landlord-dashboard .room-actions { align-items: center; }
+.landlord-dashboard .room-quick-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.landlord-dashboard .room-quick-actions form { display: flex; margin: 0; }
+.landlord-dashboard .room-quick-actions .btn { white-space: nowrap; }
+.landlord-dashboard .room-quick-actions .room-vacate-action {
+    border: 1px solid #f0d4cd;
+    background: #fff5f2;
+    color: #9e4438;
+    box-shadow: none;
+}
+.landlord-dashboard .room-quick-actions .room-vacate-action:hover { background: #fee9e4; }
+.landlord-dashboard .room-quick-actions .room-bill-action {
+    border-color: #cfe2dc;
+    background: #edf6f2;
+    color: #215d51;
+}
 .landlord-dashboard .room-actions .action-menu summary {
     width: 40px;
     height: 40px;
@@ -987,6 +1008,28 @@ body.landlord-dashboard-page {
     .landlord-dashboard .room-status-block,
     .landlord-dashboard .room-billing-block,
     .landlord-dashboard .room-payment-block { padding-left: 0; border-left: 0; }
+    .landlord-dashboard .room-quick-actions {
+        flex: 1 1 100%;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: stretch;
+        justify-content: stretch;
+        gap: 8px;
+    }
+    .landlord-dashboard .room-quick-actions > a,
+    .landlord-dashboard .room-quick-actions > form { min-width: 0; }
+    .landlord-dashboard .room-quick-actions .btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-height: 44px;
+        padding: 8px 9px;
+        white-space: normal;
+        text-align: center;
+        line-height: 1.2;
+    }
+    .landlord-dashboard .room-quick-actions > form { grid-column: 1 / -1; }
 }
 @media (max-width: 380px) {
     .landlord-dashboard { padding: 11px; }

@@ -263,21 +263,23 @@
                             </form>
                         </div>
                     </details>
+                    <div class="room-quick-actions">
                     {% if r.tenant %}
-                        <a class="btn btn-danger" href="{{ url_for('vacate_room', room_id=r.id) }}">Vacate</a>
-                        <a class="btn" href="{{ url_for('pending_bill', room_id=r.id) }}">Add pending bill</a>
+                        <a class="btn btn-danger room-vacate-action" href="{{ url_for('vacate_room', room_id=r.id) }}">Vacate</a>
+                        <a class="btn secondary-action room-bill-action" href="{{ url_for('pending_bill', room_id=r.id) }}">Add pending bill</a>
                         {% if payments_by_room.get(r.id) and payments_by_room[r.id]['balance'] == 0 %}
                             <form method="POST" action="{{ url_for('mark_rent_unpaid', room_id=r.id) }}">
-                                <button class="btn secondary-action" type="submit">Mark unpaid</button>
+                                <button class="btn secondary-action room-payment-action" type="submit">Mark unpaid</button>
                             </form>
                         {% else %}
                             <form method="POST" action="{{ url_for('mark_rent_paid', room_id=r.id) }}">
-                                <button class="btn primary-action" type="submit">Mark paid</button>
+                                <button class="btn primary-action room-payment-action" type="submit">Mark paid</button>
                             </form>
                         {% endif %}
                     {% else %}
-                        <a class="btn" href="{{ url_for('assign_tenant', room_id=r.id) }}">Assign</a>
+                        <a class="btn primary-action room-assign-action" href="{{ url_for('assign_tenant', room_id=r.id) }}">Assign tenant</a>
                     {% endif %}
+                    </div>
                         </div>
                     </div>
                 {% endfor %}
