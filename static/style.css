@@ -590,6 +590,16 @@ button, input, select, textarea {
     .property-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .property-actions .btn, .room-actions .btn { min-width: 0; }
     .room-actions { justify-content: stretch; }
+    .room-actions .action-menu[open] { flex: 1 0 100%; }
+    .room-actions .action-menu-items {
+        position: static;
+        width: 100%;
+        min-width: 0;
+        margin-top: 8px;
+        box-sizing: border-box;
+    }
+    .room-actions .action-menu-items a,
+    .room-actions .action-menu-items button { white-space: normal; overflow-wrap: anywhere; }
     .room-actions > a, .room-actions > form { flex: 1 1 130px; }
     .room-actions > a { text-align: center; }
     .room-actions form button { width: 100%; }
