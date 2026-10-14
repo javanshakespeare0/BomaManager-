@@ -717,9 +717,11 @@ def dashboard():
         payments_by_room = {room_id: get_payment_summary(room, current_period_by_room[room_id]['key']) for room_id, room in [(room.id, room) for prop in properties for room in prop.rooms] if current_period_by_room[room_id]}
         current_month = datetime.now().strftime('%Y-%m')
         total_month_collection = db.session.query(db.func.sum(Payment.amount)).join(Room).join(Property).filter(Property.landlord_id == current_user.id, db.func.strftime('%Y-%m', Payment.date_paid) == current_month).scalar() or 0
+        total_rooms = sum(len(prop.rooms) for prop in properties)
+        occupied_rooms = sum(room.is_occupied for prop in properties for room in prop.rooms)
         subscription_deadline = current_user.subscription_deadline()
         subscription_countdown = get_countdown_parts(subscription_deadline)
-        return render_template('dashboard.html', properties=properties, tenants=tenants, room=None, payment_status=None, water_bills=water_bills, pending_bills_by_room=pending_bills_by_room, payments_by_room=payments_by_room, current_period_by_room=current_period_by_room, total_month_collection=total_month_collection, current_month_label=datetime.now().strftime('%B %Y'), subscription_deadline=subscription_deadline, subscription_countdown=subscription_countdown)
+        return render_template('dashboard.html', properties=properties, tenants=tenants, room=None, payment_status=None, water_bills=water_bills, pending_bills_by_room=pending_bills_by_room, payments_by_room=payments_by_room, current_period_by_room=current_period_by_room, total_month_collection=total_month_collection, total_rooms=total_rooms, occupied_rooms=occupied_rooms, current_month_label=datetime.now().strftime('%B %Y'), subscription_deadline=subscription_deadline, subscription_countdown=subscription_countdown)
     else:
         properties = None
         room = None

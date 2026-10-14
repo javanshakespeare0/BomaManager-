@@ -6,8 +6,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
-<body>
-<div class="container dashboard-shell">
+<body class="{% if current_user.role == 'landlord' %}landlord-dashboard-page{% endif %}">
+<div class="container dashboard-shell{% if current_user.role == 'landlord' %} landlord-dashboard{% endif %}">
     <header class="dashboard-header">
         <div>
             <p class="eyebrow">BomaManager</p>
@@ -42,6 +42,34 @@
     {% endwith %}
 
     {% if current_user.role == 'landlord' %}
+        <section class="monthly-collection-bar">
+            <div>
+                <p class="eyebrow">{{ current_month_label }}</p>
+                <h2>Monthly collection</h2>
+            </div>
+            <strong>Ksh {{ '%.2f'|format(total_month_collection) }}</strong>
+        </section>
+
+        <section class="overview-grid" aria-label="Portfolio overview">
+            <div class="overview-card">
+                <span>Properties</span>
+                <strong>{{ properties|length }}</strong>
+            </div>
+            <div class="overview-card">
+                <span>Tenants</span>
+                <strong>{{ tenants|length }}</strong>
+            </div>
+            <div class="overview-card">
+                <span>Rooms occupied</span>
+                <strong>{{ occupied_rooms }} / {{ total_rooms }}</strong>
+                <small>currently occupied</small>
+            </div>
+            <div class="overview-card">
+                <span>Current plan</span>
+                <strong>{{ current_user.subscription_plan|upper if current_user.subscription_plan else 'TRIAL' }}</strong>
+            </div>
+        </section>
+
         <section class="countdown-banner {{ 'countdown-banner-active' if current_user.has_active_subscription() else 'countdown-banner-trial' }}" {% if subscription_deadline %}data-countdown-target="{{ subscription_deadline.isoformat() }}" data-subscription-countdown{% endif %}>
             <div>
                 <p class="eyebrow">Subscription countdown</p>
@@ -67,44 +95,33 @@
                 <a href="{{ url_for('subscription_page') }}" class="btn secondary-action">Manage plan</a>
             </div>
         </section>
-        <section class="monthly-collection-bar">
-            <div>
-                <p class="eyebrow">{{ current_month_label }}</p>
-                <h2>Monthly collection</h2>
-            </div>
-            <strong>Ksh {{ '%.2f'|format(total_month_collection) }}</strong>
-        </section>
 
-        <section class="overview-grid" aria-label="Portfolio overview">
-            <div class="overview-card">
-                <span>Properties</span>
-                <strong>{{ properties|length }}</strong>
+        <div class="property-card destination-card">
+            <div class="destination-heading">
+                <div>
+                    <p class="eyebrow">Get paid</p>
+                    <h3>Rent payment destination</h3>
+                </div>
+                <a href="{{ url_for('settings') }}" class="destination-edit">Edit details</a>
             </div>
-            <div class="overview-card">
-                <span>Tenants</span>
-                <strong>{{ tenants|length }}</strong>
-            </div>
-            <div class="overview-card">
-                <span>Monthly income</span>
-                <strong>Ksh {{ '%.2f'|format(total_month_collection) }}</strong>
-            </div>
-            <div class="overview-card">
-                <span>Current plan</span>
-                <strong>{{ current_user.subscription_plan|upper if current_user.subscription_plan else 'TRIAL' }}</strong>
-            </div>
-        </section>
-
-        <div class="property-card">
-            <h3>Rent payment destination</h3>
             {% if current_user.mpesa_till %}
-                <p>M-Pesa {{ {'till': 'Till', 'paybill': 'PayBill', 'send_money': 'Send Money', 'pochi': 'Pochi la Biashara'}.get(current_user.mpesa_type, 'account') }}: <b>{{ current_user.mpesa_till }}</b></p>
+                <div class="destination-value">
+                    <span>M-Pesa {{ {'till': 'Till', 'paybill': 'PayBill', 'send_money': 'Send Money', 'pochi': 'Pochi la Biashara'}.get(current_user.mpesa_type, 'account') }}</span>
+                    <strong>{{ current_user.mpesa_till }}</strong>
+                    <button type="button" class="copy-button" data-copy-value="{{ current_user.mpesa_till }}">Copy</button>
+                </div>
             {% endif %}
             {% if current_user.bank_name and current_user.account_number %}
-                <p>Bank: <b>{{ current_user.bank_name }}</b> · Account: <b>{{ current_user.account_number }}</b></p>
+                <div class="destination-value">
+                    <span>{{ current_user.bank_name }} account</span>
+                    <strong>{{ current_user.account_number }}</strong>
+                    <button type="button" class="copy-button" data-copy-value="{{ current_user.account_number }}">Copy</button>
+                </div>
             {% endif %}
             {% if not current_user.mpesa_till and not current_user.account_number %}
                 <p class="muted">No payment destination saved yet.</p>
             {% endif %}
+            <span class="copy-feedback" data-copy-feedback role="status" aria-live="polite"></span>
         </div>
         <section class="tenant-directory">
             <div class="section-heading">
@@ -138,17 +155,36 @@
                 <p class="eyebrow">Portfolio</p>
                 <h2>Your properties</h2>
             </div>
-            <span class="count-badge">{{ properties|length }} {{ 'property' if properties|length == 1 else 'properties' }}</span>
+            <div class="portfolio-heading-actions">
+                <span class="count-badge">{{ properties|length }} {{ 'property' if properties|length == 1 else 'properties' }}</span>
+                {% if properties %}
+                    <button type="button" class="portfolio-toggle-all" data-toggle-all aria-expanded="true">Collapse all</button>
+                {% endif %}
+            </div>
         </div>
         {% if properties %}
+            <section class="portfolio-tools" aria-label="Find rooms">
+                <label class="portfolio-search">
+                    <span>Search your portfolio</span>
+                    <input type="search" id="portfolio-search" placeholder="Property, room, tenant or phone" autocomplete="off">
+                </label>
+                <div class="room-filters" role="group" aria-label="Filter rooms">
+                    <button type="button" class="room-filter is-active" data-room-filter="all" aria-pressed="true">All rooms</button>
+                    <button type="button" class="room-filter" data-room-filter="due" aria-pressed="false">Rent due</button>
+                    <button type="button" class="room-filter" data-room-filter="vacant" aria-pressed="false">Vacant</button>
+                    <button type="button" class="room-filter" data-room-filter="paid" aria-pressed="false">Paid</button>
+                </div>
+                <p class="portfolio-results" data-portfolio-results role="status" aria-live="polite"></p>
+            </section>
             {% for p in properties %}
-            <div class="property-card">
+            <article class="property-card landlord-property-card" data-dashboard-property>
                 <div class="property-header">
-                    <div>
+                    <div class="property-heading">
                         <h3>{{ p.name }}</h3>
                         <p class="muted">{{ p.location }} · {{ p.rooms|length }} {{ 'room' if p.rooms|length == 1 else 'rooms' }}</p>
                     </div>
                     <div class="property-actions">
+                        <button type="button" class="property-toggle" data-property-toggle aria-expanded="true">Hide rooms</button>
                         <a class="btn secondary-action" href="{{ url_for('edit_property', prop_id=p.id) }}">Edit name</a>
                         <a class="btn primary-action" href="{{ url_for('add_room', prop_id=p.id) }}">Add room</a>
                         <form method="POST" action="{{ url_for('delete_property', prop_id=p.id) }}">
@@ -159,7 +195,7 @@
 
                 <div class="room-list">
                 {% for r in p.rooms %}
-                    <div class="room-row{% if r.tenant and not payments_by_room.get(r.id) %} unpaid-room{% endif %}">
+                    <div class="room-row{% if r.tenant and not payments_by_room.get(r.id) %} unpaid-room{% endif %}" data-dashboard-room data-room-state="{% if not r.tenant %}vacant{% elif payments_by_room.get(r.id) and payments_by_room[r.id]['balance'] == 0 %}paid{% else %}due{% endif %}">
                         <div class="room-details">
                             <div class="room-main">
                                 <strong>Room {{ r.room_number }}</strong>
@@ -247,8 +283,9 @@
                 {% endfor %}
                 {% if not p.rooms %}<p class="empty-state">No rooms added yet.</p>{% endif %}
                 </div>
-            </div>
+            </article>
             {% endfor %}
+            <p class="portfolio-empty" data-portfolio-empty hidden>No rooms match your search. Try another name or filter.</p>
         {% else %}
             <div class="empty-state large-empty"><strong>No properties yet</strong><span>Add your first property to get started.</span></div>
         {% endif %}
@@ -303,6 +340,143 @@
 </div>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        const landlordDashboard = document.querySelector('.landlord-dashboard');
+        if (landlordDashboard) {
+            const propertyCards = Array.from(landlordDashboard.querySelectorAll('[data-dashboard-property]'));
+            const roomFilters = Array.from(landlordDashboard.querySelectorAll('[data-room-filter]'));
+            const searchInput = landlordDashboard.querySelector('#portfolio-search');
+            const resultsLabel = landlordDashboard.querySelector('[data-portfolio-results]');
+            const emptyMessage = landlordDashboard.querySelector('[data-portfolio-empty]');
+            const toggleAllButton = landlordDashboard.querySelector('[data-toggle-all]');
+            let activeFilter = 'all';
+
+            function setPropertyExpanded(card, expanded) {
+                const roomList = card.querySelector('.room-list');
+                const toggle = card.querySelector('[data-property-toggle]');
+                if (!roomList || !toggle) return;
+                roomList.hidden = !expanded;
+                toggle.setAttribute('aria-expanded', String(expanded));
+                toggle.textContent = expanded ? 'Hide rooms' : 'Show rooms';
+            }
+
+            function updatePortfolio() {
+                const query = searchInput ? searchInput.value.trim().toLocaleLowerCase() : '';
+                let visibleProperties = 0;
+                let visibleRooms = 0;
+
+                propertyCards.forEach(function (card) {
+                    const heading = card.querySelector('.property-heading');
+                    const propertyMatches = !!heading && heading.textContent.toLocaleLowerCase().includes(query);
+                    const rooms = Array.from(card.querySelectorAll('[data-dashboard-room]'));
+                    let matchedRooms = 0;
+
+                    rooms.forEach(function (room) {
+                        const matchesSearch = !query || propertyMatches || room.textContent.toLocaleLowerCase().includes(query);
+                        const matchesFilter = activeFilter === 'all' || room.dataset.roomState === activeFilter;
+                        const isVisible = matchesSearch && matchesFilter;
+                        room.hidden = !isVisible;
+                        if (isVisible) matchedRooms += 1;
+                    });
+
+                    const isVisible = matchedRooms > 0 || (!rooms.length && (!query || propertyMatches) && activeFilter === 'all');
+                    card.hidden = !isVisible;
+                    if (isVisible) {
+                        visibleProperties += 1;
+                        visibleRooms += matchedRooms;
+                    }
+                });
+
+                if (resultsLabel) {
+                    resultsLabel.textContent = 'Showing ' + visibleRooms + (visibleRooms === 1 ? ' room' : ' rooms') +
+                        ' across ' + visibleProperties + (visibleProperties === 1 ? ' property' : ' properties');
+                }
+                if (emptyMessage) emptyMessage.hidden = visibleProperties > 0;
+                if (toggleAllButton) toggleAllButton.disabled = visibleProperties === 0;
+            }
+
+            landlordDashboard.querySelectorAll('[data-property-toggle]').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    const card = button.closest('[data-dashboard-property]');
+                    const isExpanded = button.getAttribute('aria-expanded') === 'true';
+                    if (card) setPropertyExpanded(card, !isExpanded);
+                    if (toggleAllButton) {
+                        const visibleCards = propertyCards.filter(function (item) { return !item.hidden; });
+                        const allExpanded = visibleCards.every(function (item) {
+                            const toggle = item.querySelector('[data-property-toggle]');
+                            return toggle && toggle.getAttribute('aria-expanded') === 'true';
+                        });
+                        toggleAllButton.textContent = allExpanded ? 'Collapse all' : 'Expand all';
+                        toggleAllButton.setAttribute('aria-expanded', String(allExpanded));
+                    }
+                });
+            });
+
+            roomFilters.forEach(function (button) {
+                button.addEventListener('click', function () {
+                    activeFilter = button.dataset.roomFilter || 'all';
+                    roomFilters.forEach(function (filterButton) {
+                        const isActive = filterButton === button;
+                        filterButton.classList.toggle('is-active', isActive);
+                        filterButton.setAttribute('aria-pressed', String(isActive));
+                    });
+                    updatePortfolio();
+                });
+            });
+
+            if (searchInput) searchInput.addEventListener('input', updatePortfolio);
+            if (toggleAllButton) {
+                toggleAllButton.addEventListener('click', function () {
+                    const visibleCards = propertyCards.filter(function (card) { return !card.hidden; });
+                    const shouldExpand = visibleCards.some(function (card) {
+                        const toggle = card.querySelector('[data-property-toggle]');
+                        return toggle && toggle.getAttribute('aria-expanded') !== 'true';
+                    });
+                    visibleCards.forEach(function (card) { setPropertyExpanded(card, shouldExpand); });
+                    toggleAllButton.textContent = shouldExpand ? 'Collapse all' : 'Expand all';
+                    toggleAllButton.setAttribute('aria-expanded', String(shouldExpand));
+                });
+            }
+            updatePortfolio();
+        }
+
+        landlordDashboard && landlordDashboard.querySelectorAll('[data-copy-value]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                const value = button.dataset.copyValue || '';
+                const feedback = landlordDashboard.querySelector('[data-copy-feedback]');
+
+                function showFeedback(message) {
+                    if (feedback) feedback.textContent = message;
+                }
+
+                function fallbackCopy() {
+                    const temporaryInput = document.createElement('textarea');
+                    temporaryInput.value = value;
+                    temporaryInput.setAttribute('readonly', '');
+                    temporaryInput.style.position = 'fixed';
+                    temporaryInput.style.opacity = '0';
+                    document.body.appendChild(temporaryInput);
+                    temporaryInput.select();
+                    const copied = document.execCommand('copy');
+                    temporaryInput.remove();
+                    if (copied) {
+                        showFeedback('Copied payment detail.');
+                        button.textContent = 'Copied';
+                    } else {
+                        showFeedback('Could not copy. Please select and copy the number.');
+                    }
+                }
+
+                if (!navigator.clipboard || !navigator.clipboard.writeText) {
+                    fallbackCopy();
+                    return;
+                }
+                navigator.clipboard.writeText(value).then(function () {
+                    showFeedback('Copied payment detail.');
+                    button.textContent = 'Copied';
+                }).catch(fallbackCopy);
+            });
+        });
+
         document.querySelectorAll('[data-countdown-target]').forEach(function (banner) {
             const target = banner.getAttribute('data-countdown-target');
             if (!target) return;
