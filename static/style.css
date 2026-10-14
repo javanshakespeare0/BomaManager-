@@ -1040,7 +1040,29 @@ body.landlord-dashboard-page {
     .landlord-dashboard { padding: 11px; }
     .landlord-dashboard .dashboard-header-actions { flex-direction: column; align-items: stretch; }
     .landlord-dashboard .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .landlord-dashboard .property-actions { grid-template-columns: 1fr; }
+    .landlord-dashboard .property-actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: stretch;
+        gap: 8px;
+    }
+    .landlord-dashboard .property-actions > a,
+    .landlord-dashboard .property-actions > form,
+    .landlord-dashboard .property-actions > button {
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 0;
+    }
+    .landlord-dashboard .property-actions > form { display: flex; }
+    .landlord-dashboard .property-actions .btn,
+    .landlord-dashboard .property-actions form button {
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 0;
+        padding: 9px 7px;
+        white-space: normal;
+        text-align: center;
+        line-height: 1.2;
+    }
     .landlord-dashboard .section-heading { align-items: flex-start; flex-direction: column; }
 }
 html[data-theme="dark"] body.landlord-dashboard-page { background: #101b19; color: #e2ebe8; }
