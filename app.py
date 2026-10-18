@@ -470,10 +470,16 @@ def get_payment_summary(room, period_key):
 
 
 def normalize_registration_phone(value):
-    phone = re.sub(r'[\s()-]', '', value or '')
+    phone = re.sub(r'[\s()-]', '', (value or '').strip())
+    if not phone:
+        return None
     if phone.startswith('00'):
         phone = '+' + phone[2:]
-    if phone.startswith('0') and phone[1:].isdigit():
+    if phone.startswith('+'):
+        phone = re.sub(r'\+', '', phone, count=1)
+    if phone.startswith('254') and len(phone) == 12 and phone.isdigit():
+        phone = '+' + phone
+    elif phone.startswith('0') and len(phone) == 10 and phone[1:].isdigit():
         phone = '+254' + phone[1:]
     elif phone.isdigit() and len(phone) == 9 and phone[0] in {'1', '7'}:
         phone = '+254' + phone

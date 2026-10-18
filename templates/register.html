@@ -80,7 +80,7 @@
 
             <label for="contact_number">Mobile phone number</label>
             <input type="tel" name="contact_number" id="contact_number" value="{{ form_values.get('contact_number', '') }}" placeholder="+254 7XX XXX XXX" autocomplete="tel" inputmode="tel" required maxlength="30">
-            <small class="helper-text">Kenyan numbers like 07… are accepted. International numbers should include + and the country code.</small>
+            <small class="helper-text">Kenyan numbers like 07… or 01… are accepted. International numbers should include + and the country code.</small>
 
             <div id="verification-fields" {% if not verification_sent %}hidden{% endif %}>
                 <label for="verification_code">Verification code</label>
