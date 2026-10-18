@@ -17,6 +17,7 @@ try:
     import requests
     from requests.auth import HTTPBasicAuth
     from sqlalchemy import inspect
+    from sqlalchemy.exc import SQLAlchemyError
     from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
     from flask_sqlalchemy import SQLAlchemy
     from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
@@ -383,10 +384,7 @@ def generate_room_numbers(room_type, room_count, prefix=None, start_number=1):
 
 
 def format_phone(phone):
-    normalized = normalize_kenyan_phone(phone)
-    if not normalized:
-        return None
-    return normalized[1:]
+    return format_kenyan_phone(phone)
 
 
 def valid_callback_url(callback_url):
@@ -483,6 +481,11 @@ def normalize_kenyan_phone(value):
     if digits.isdigit() and len(digits) == 9 and digits[0] in {'1', '7'}:
         return '+254' + digits
     return None
+
+
+def format_kenyan_phone(phone):
+    normalized = normalize_kenyan_phone(phone)
+    return normalized[1:] if normalized else None
 
 
 def normalize_registration_phone(value):
@@ -709,11 +712,14 @@ def register():
     )
 
 
-@app.route('/register/send-code', methods=['POST'])
-def send_registration_code():
+@app.route('/api/send-otp', methods=['POST'])
+@app.route('/register/send-code', methods=['POST'], endpoint='send_registration_code')
+def send_otp():
     data = request.get_json(silent=True)
+    if data is None:
+        data = request.form.to_dict()
     if not isinstance(data, dict):
-        return jsonify(error='Send registration details as a JSON object.'), 400
+        return jsonify(error='Send registration details as JSON or form data.'), 400
 
     google_registration = session.get('pending_google_registration')
     if google_registration:
@@ -732,10 +738,17 @@ def send_registration_code():
 
     if User.query.filter_by(email=email).first():
         return jsonify(error='An account already exists for this email.'), 409
-    phone = normalize_registration_phone(str(data.get('contact_number', '')))
+    raw_phone = data.get('contact_number') or data.get('phone', '')
+    phone_digits = format_kenyan_phone(str(raw_phone))
+    phone = '+' + phone_digits if phone_digits else None
     if not phone:
         return jsonify(error='Enter a valid phone number, including the country code if outside Kenya.'), 400
-    if role != 'google' and data.get('has_password') is not True:
+    has_password = (
+        data.get('has_password') is True
+        or str(data.get('has_password', '')).lower() in {'true', '1', 'on'}
+        or bool(data.get('password'))
+    )
+    if role != 'google' and not has_password:
         return jsonify(error='Enter a password before requesting a verification code.'), 400
 
     now = datetime.utcnow()
@@ -772,7 +785,7 @@ def send_registration_code():
     session['registration_draft'] = {
         'name': google_registration['name'] if google_registration else name,
         'email': email,
-        'contact_number': str(data.get('contact_number', '')).strip(),
+        'contact_number': str(raw_phone).strip(),
         'role': role,
         'landlord_id': str(data.get('landlord_id', '')),
     }
@@ -996,13 +1009,14 @@ def update_contact():
         return "Access Denied"
     if request.method == 'POST':
         contact_number = request.form['contact_number'].strip()
+        normalized_contact = normalize_kenyan_phone(contact_number) if contact_number else None
         if current_user.role == 'tenant' and not contact_number:
             flash('Tenant contact number is required.')
             return render_template('update_contact.html')
-        if contact_number and (not contact_number.replace('+', '').replace(' ', '').replace('-', '').isdigit() or len(contact_number.replace('+', '').replace(' ', '').replace('-', '')) < 9):
-            flash('Enter a valid contact number.')
+        if contact_number and not normalized_contact:
+            flash('Enter a valid Kenyan contact number, such as 07XXXXXXXX or 01XXXXXXXX.')
             return render_template('update_contact.html')
-        current_user.contact_number = contact_number or None
+        current_user.contact_number = normalized_contact or contact_number or None
         db.session.commit()
         flash('Contact number updated!')
         return redirect(url_for('dashboard'))
@@ -1024,8 +1038,9 @@ def add_tenant():
             flash('Name and email are required.')
             return render_template('add_tenant.html')
 
-        if contact_number and (not contact_number.replace('+', '').replace(' ', '').replace('-', '').isdigit() or len(contact_number.replace('+', '').replace(' ', '').replace('-', '')) < 9):
-            flash('Enter a valid tenant contact number.')
+        normalized_contact = normalize_kenyan_phone(contact_number) if contact_number else None
+        if contact_number and not normalized_contact:
+            flash('Enter a valid Kenyan tenant contact number, such as 07XXXXXXXX or 01XXXXXXXX.')
             return render_template('add_tenant.html')
 
         if User.query.filter_by(email=email).first():
@@ -1035,7 +1050,7 @@ def add_tenant():
         tenant = User(
             email=email,
             name=name,
-            contact_number=contact_number,
+            contact_number=normalized_contact or contact_number,
             password=bcrypt.generate_password_hash('temp123').decode('utf-8'),
             role='tenant',
             landlord_id=current_user.id,
@@ -1503,119 +1518,98 @@ def stk_push(room_id):
 
 @app.route('/api/mpesa/callback', methods=['POST'])
 def mpesa_callback():
-    data = request.get_json()
-    print("M-PESA CALLBACK:", data)
+    accepted = {"ResultCode": 0, "ResultDesc": "Accepted"}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        app.logger.warning('Ignoring malformed M-Pesa rent callback payload.')
+        return jsonify(accepted)
 
-    try:
-        stk_callback = data['Body']['stkCallback']
-        result_code = stk_callback['ResultCode']
-        result_desc = stk_callback.get('ResultDesc', '')
-        checkout_request_id = stk_callback.get('CheckoutRequestID')
-        attempt = PaymentAttempt.query.filter_by(checkout_request_id=checkout_request_id).first() if checkout_request_id else None
+    body = data.get('Body')
+    stk_callback = body.get('stkCallback') if isinstance(body, dict) else None
+    if not isinstance(stk_callback, dict) or 'ResultCode' not in stk_callback:
+        app.logger.warning('Ignoring M-Pesa callback without a valid STK result.')
+        return jsonify(accepted)
 
-        if attempt and attempt.cancelled:
-            app.logger.info('Ignoring callback for cancelled STK attempt %s', checkout_request_id)
-            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
+    checkout_request_id = stk_callback.get('CheckoutRequestID')
+    if not isinstance(checkout_request_id, str) or not checkout_request_id.strip():
+        app.logger.warning('Ignoring M-Pesa callback without a CheckoutRequestID.')
+        return jsonify(accepted)
 
-        # 1. Payment failed / cancelled by user
-        if str(result_code) != '0':
-            print(f"STK Failed: Code {result_code} - {result_desc}")
-            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
+    attempt = PaymentAttempt.query.filter_by(
+        checkout_request_id=checkout_request_id
+    ).first()
+    if not attempt:
+        app.logger.warning('Ignoring M-Pesa callback for unknown STK attempt %s.', checkout_request_id)
+        return jsonify(accepted)
 
-        # 2. Payment success - parse metadata
-        items = stk_callback['CallbackMetadata']['Item']
-        metadata = {item['Name']: item.get('Value') for item in items}
+    if attempt.cancelled:
+        app.logger.info('Ignoring callback for cancelled STK attempt %s.', checkout_request_id)
+        return jsonify(accepted)
 
-        amount = metadata.get('Amount')
-        mpesa_code = metadata.get('MpesaReceiptNumber')
-        phone = metadata.get('PhoneNumber')
-        account_ref = metadata.get('AccountReference', '') # e.g. RoomA1_Landlord5
-
-        print(f"Received: {amount} | Code: {mpesa_code} | Ref: {account_ref}")
-
-        # 3. Parse Room + Landlord from AccountReference
-        # Supports both: "RoomA1" (old) and "RoomA1_Landlord5" (new)
-        room_number = account_ref
-        landlord_id_from_ref = None
-
-        if "_Landlord" in account_ref:
-            parts = account_ref.split("_Landlord")
-            room_number = parts[0].replace("Room", "")
-            try:
-                landlord_id_from_ref = int(parts[1])
-            except:
-                landlord_id_from_ref = None
-        elif account_ref.startswith("Room"):
-            room_number = account_ref.replace("Room", "")
-
-        room_query = Room.query.join(Property).filter(Room.room_number == room_number)
-        if landlord_id_from_ref is not None:
-            room_query = room_query.filter(Property.landlord_id == landlord_id_from_ref)
-        room = room_query.first()
-
-        if not room:
-            print(f"ERROR: Room {room_number} not found for ref {account_ref}")
-            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
-
-        # 4. Get billing period
-        current_period = get_billing_period(room)
-        if not current_period:
-            print(f"No billing period for Room {room_number}")
-            # Fallback to current month
-            from datetime import datetime
-            current_period = {'key': datetime.now().strftime("%B %Y")}
-
-        month_key = current_period['key']
-
-        # 5. Prevent double-save (M-Pesa can send callback twice)
-        existing = Payment.query.filter_by(mpesa_code=mpesa_code).first()
-        if existing:
-            print(f"Duplicate callback ignored: {mpesa_code}")
-            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
-
-        # 6. Save payment
-        if amount is None or not mpesa_code or room.tenant_id is None:
-            print(f"Invalid payment callback metadata for ref {account_ref}")
-            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
-
-        if attempt and (attempt.room_id != room.id or attempt.tenant_id != room.tenant_id):
-            app.logger.error('STK attempt ownership mismatch: %s', checkout_request_id)
-            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
-
-        payment = Payment(
-            amount=float(amount),
-            month=month_key,
-            room_id=room.id,
-            tenant_id=room.tenant_id,
-            mpesa_code=mpesa_code
+    if str(stk_callback['ResultCode']) != '0':
+        app.logger.info(
+            'STK payment failed for %s: %s',
+            checkout_request_id,
+            stk_callback.get('ResultDesc', ''),
         )
+        return jsonify(accepted)
+
+    callback_metadata = stk_callback.get('CallbackMetadata')
+    items = callback_metadata.get('Item') if isinstance(callback_metadata, dict) else None
+    if not isinstance(items, list):
+        app.logger.warning('Ignoring successful STK callback without metadata for %s.', checkout_request_id)
+        return jsonify(accepted)
+
+    metadata = {
+        item['Name']: item.get('Value')
+        for item in items
+        if isinstance(item, dict) and isinstance(item.get('Name'), str)
+    }
+    amount = metadata.get('Amount')
+    mpesa_code = metadata.get('MpesaReceiptNumber')
+    try:
+        payment_amount = float(amount)
+    except (TypeError, ValueError):
+        app.logger.warning('Ignoring STK callback with invalid amount for %s.', checkout_request_id)
+        return jsonify(accepted)
+
+    if (
+        payment_amount <= 0
+        or not payment_amount.is_integer()
+        or int(payment_amount) != int(attempt.amount)
+        or not isinstance(mpesa_code, str)
+        or not mpesa_code.strip()
+    ):
+        app.logger.warning('Ignoring STK callback with invalid payment details for %s.', checkout_request_id)
+        return jsonify(accepted)
+    mpesa_code = mpesa_code.strip()
+
+    existing = Payment.query.filter_by(mpesa_code=mpesa_code).first()
+    if existing:
+        app.logger.info('Ignoring duplicate M-Pesa receipt %s.', mpesa_code)
+        return jsonify(accepted)
+
+    payment = Payment(
+        amount=payment_amount,
+        month=attempt.month,
+        room_id=attempt.room_id,
+        tenant_id=attempt.tenant_id,
+        mpesa_code=mpesa_code,
+    )
+    try:
         db.session.add(payment)
         db.session.commit()
-
-        # 7. SPLIT LOGIC - Who does this money belong to?
-        landlord = room.property.landlord
-        commission_rate = 0.05 # 5% - you keep this
-
-        commission = round(float(amount) * commission_rate, 2)
-        to_landlord = round(float(amount) - commission, 2)
-
-        print(f"✅ Payment saved: Room {room_number} | {amount} | {mpesa_code}")
-        print(f" → Belongs to Landlord {landlord.email} (ID: {landlord.id})")
-        print(f" → Landlord Till: {landlord.mpesa_till} ({landlord.mpesa_type})")
-        print(f" → SPLIT: You keep Ksh {commission} | Send Ksh {to_landlord} to landlord")
-        print(f" → DISBURSEMENT NEEDED: B2C to {landlord.mpesa_till} - Ksh {to_landlord}")
-
-        # TODO (for real production): Trigger B2C payout here
-        # b2c_payout(phone=landlord.mpesa_till, amount=to_landlord, reference=mpesa_code)
-
-    except Exception as e:
-        print("Callback Error:", e)
-        import traceback
-        traceback.print_exc()
-        # Always return Accepted, otherwise Safaricom will keep retrying
+    except SQLAlchemyError:
         db.session.rollback()
+        app.logger.exception('Could not save M-Pesa payment for STK attempt %s.', checkout_request_id)
+    else:
+        app.logger.info(
+            'Saved M-Pesa payment %s for STK attempt %s.',
+            mpesa_code,
+            checkout_request_id,
+        )
 
-    return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
+    return jsonify(accepted)
 @app.route('/pay_rent/<int:room_id>', methods=['GET'])
 @login_required
 def pay_rent(room_id):
