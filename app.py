@@ -383,12 +383,10 @@ def generate_room_numbers(room_type, room_count, prefix=None, start_number=1):
 
 
 def format_phone(phone):
-    phone = phone.strip().replace(" ", "").replace("-", "")
-    if phone.startswith('0'):
-        phone = '254' + phone[1:]
-    if not phone.startswith('254'):
-        phone = '254' + phone
-    return phone
+    normalized = normalize_kenyan_phone(phone)
+    if not normalized:
+        return None
+    return normalized[1:]
 
 
 def valid_callback_url(callback_url):
@@ -469,22 +467,28 @@ def get_payment_summary(room, period_key):
     }
 
 
+def normalize_kenyan_phone(value):
+    cleaned = re.sub(r'[^\d+]', '', (value or '').strip())
+    if not cleaned:
+        return None
+    if cleaned.startswith('00'):
+        cleaned = cleaned[2:]
+    if cleaned.startswith('+'):
+        cleaned = cleaned[1:]
+    digits = cleaned
+    if digits.startswith('254') and len(digits) == 12 and digits.isdigit():
+        return '+' + digits
+    if digits.startswith('0') and len(digits) == 10 and digits.isdigit():
+        return '+254' + digits[1:]
+    if digits.isdigit() and len(digits) == 9 and digits[0] in {'1', '7'}:
+        return '+254' + digits
+    return None
+
+
 def normalize_registration_phone(value):
-    phone = re.sub(r'[\s()-]', '', (value or '').strip())
+    phone = normalize_kenyan_phone(value)
     if not phone:
         return None
-    if phone.startswith('00'):
-        phone = '+' + phone[2:]
-    if phone.startswith('+'):
-        phone = re.sub(r'\+', '', phone, count=1)
-    if phone.startswith('254') and len(phone) == 12 and phone.isdigit():
-        phone = '+' + phone
-    elif phone.startswith('0') and len(phone) == 10 and phone[1:].isdigit():
-        phone = '+254' + phone[1:]
-    elif phone.isdigit() and len(phone) == 9 and phone[0] in {'1', '7'}:
-        phone = '+254' + phone
-    elif phone.isdigit() and phone.startswith('254'):
-        phone = '+' + phone
     if not re.fullmatch(r'\+[1-9]\d{7,14}', phone):
         return None
     return phone
@@ -1664,20 +1668,14 @@ def pay_subscription():
     plan = request.form.get('plan', 'basic')
     if plan not in {'basic', 'pro'}:
         plan = 'basic'
-    phone = (request.form.get('phone') or '').strip()
+    phone = format_phone(request.form.get('phone'))
 
     if not phone:
         flash('Enter your phone number to pay for the subscription.', 'danger')
         return redirect(url_for('subscription_page'))
 
-    if phone.startswith('0'):
-        phone = '254' + phone[1:]
-
-    if not phone.startswith('254'):
-        phone = '254' + phone
-
-    if len(phone) != 12:
-        flash('Use a valid phone number in the format 07XXXXXXXX or 2547XXXXXXXX.', 'danger')
+    if not re.fullmatch(r'254(?:7|1)\d{8}', phone):
+        flash('Use a valid phone number in the format 07XXXXXXXX or 01XXXXXXXX.', 'danger')
         return redirect(url_for('subscription_page'))
 
     amount = 500 if plan == 'basic' else 1000
