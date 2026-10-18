@@ -1,5 +1,6 @@
 # PowerShell script to activate venv and run app
 $env:APP_ENV = 'development'
+$env:SECRET_KEY = 'dev-secret-key'
 if (Test-Path -Path .\.venv\Scripts\Activate.ps1) {
     . .\.venv\Scripts\Activate.ps1
     python app.py

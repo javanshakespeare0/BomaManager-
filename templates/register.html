@@ -48,39 +48,60 @@
           {% endif %}
         {% endwith %}
 
-        <form method="POST">
-            <input type="text" name="name" placeholder="User name" required maxlength="100" style="width: 100%; padding: 10px; margin-bottom: 10px;">
-            <input type="tel" name="contact_number" id="contact_number" placeholder="Contact number" maxlength="30" style="width: 100%; padding: 10px; margin-bottom: 10px;">
-            <input type="email" name="email" placeholder="Email" required style="width: 100%; padding: 10px; margin-bottom: 10px;">
-            <input type="password" name="password" id="password" placeholder="Password" required style="width: 100%; padding: 10px; margin-bottom: 6px;">
-            <div class="password-meter" aria-live="polite">
-                <div id="password-strength-bar" class="password-strength-bar"></div>
-            </div>
-            <small id="password-strength-text" class="password-strength-text">Password strength:—</small>
-            <select name="role" required style="width: 100%; padding: 10px; margin-top: 12px; margin-bottom: 15px;">
-                <option value="">-- Select Role --</option>
-                <option value="landlord">Landlord</option>
-                <option value="tenant">Tenant</option>
-            </select>
-            <div id="landlord-field" hidden>
-                <select name="landlord_id" id="landlord_id" style="width: 100%; padding: 10px; margin-bottom: 15px;">
-                    <option value="">-- Select Your Landlord --</option>
-                    {% for landlord in landlords %}
-                        <option value="{{ landlord.id }}">{{ landlord.email }}</option>
-                    {% endfor %}
+        <p class="helper-text">Verify your phone to finish creating your account. We’ll save the verified number to your profile.</p>
+        <form method="POST" id="registration-form" data-send-code-url="{{ url_for('send_registration_code') }}" data-google-registration="{{ 'true' if google_registration else 'false' }}" data-code-sent-to-phone="{{ form_values.get('contact_number', '') if verification_sent else '' }}">
+            {% if google_registration %}
+                <label for="name">Name</label>
+                <input type="text" id="name" name="name" value="{{ form_values.get('name', '') }}" readonly required maxlength="100">
+                <label for="email">Google account email</label>
+                <input type="email" id="email" name="email" value="{{ form_values.get('email', '') }}" readonly required>
+            {% else %}
+                <input type="text" name="name" placeholder="User name" value="{{ form_values.get('name', '') }}" required maxlength="100" autocomplete="name" style="width: 100%; padding: 10px; margin-bottom: 10px;">
+                <input type="email" name="email" placeholder="Email" value="{{ form_values.get('email', '') }}" required autocomplete="email" style="width: 100%; padding: 10px; margin-bottom: 10px;">
+                <input type="password" name="password" id="password" placeholder="Password" required autocomplete="new-password" style="width: 100%; padding: 10px; margin-bottom: 6px;">
+                <div class="password-meter" aria-live="polite">
+                    <div id="password-strength-bar" class="password-strength-bar"></div>
+                </div>
+                <small id="password-strength-text" class="password-strength-text">Password strength:—</small>
+                <select name="role" id="registration-role" required style="width: 100%; padding: 10px; margin-top: 12px; margin-bottom: 15px;">
+                    <option value="">-- Select Role --</option>
+                    <option value="landlord"{% if form_values.get('role') == 'landlord' %} selected{% endif %}>Landlord</option>
+                    <option value="tenant"{% if form_values.get('role') == 'tenant' %} selected{% endif %}>Tenant</option>
                 </select>
+                <div id="landlord-field" {% if form_values.get('role') != 'tenant' %}hidden{% endif %}>
+                    <select name="landlord_id" id="landlord_id" style="width: 100%; padding: 10px; margin-bottom: 15px;">
+                        <option value="">-- Select Your Landlord --</option>
+                        {% for landlord in landlords %}
+                            <option value="{{ landlord.id }}"{% if form_values.get('landlord_id')|string == landlord.id|string %} selected{% endif %}>{{ landlord.email }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            {% endif %}
+
+            <label for="contact_number">Mobile phone number</label>
+            <input type="tel" name="contact_number" id="contact_number" value="{{ form_values.get('contact_number', '') }}" placeholder="+254 7XX XXX XXX" autocomplete="tel" inputmode="tel" required maxlength="30">
+            <small class="helper-text">Kenyan numbers like 07… are accepted. International numbers should include + and the country code.</small>
+
+            <div id="verification-fields" {% if not verification_sent %}hidden{% endif %}>
+                <label for="verification_code">Verification code</label>
+                <input type="text" name="verification_code" id="verification_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="6-digit code" {% if verification_sent %}required{% endif %}>
             </div>
-            <button type="submit" style="width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 5px;">
-                Register
+            <p id="verification-message" class="helper-text" role="status" aria-live="polite">{% if verification_sent %}Enter the code we sent to your phone.{% endif %}</p>
+            <button type="button" id="send-verification-code" style="width: 100%; padding: 12px; background: #26796d; color: white; border: none; border-radius: 5px;">
+                {{ 'Resend verification code' if verification_sent else 'Send verification code' }}
+            </button>
+            <button type="submit" id="complete-registration" {% if not verification_sent %}hidden{% endif %} style="width: 100%; padding: 12px; margin-top: 10px; background: #28a745; color: white; border: none; border-radius: 5px;">
+                Verify code and create account
             </button>
         </form>
 
-        <div class="divider">OR</div>
-
-        <a href="{{ url_for('google_login') }}?register=true" class="google-btn">
-            <img src="https://www.gstatic.com/images/branding/product/1x/gsa_64dp.png" width="18">
-            Register with Google
-        </a>
+        {% if not google_registration %}
+            <div class="divider">OR</div>
+            <a href="{{ url_for('google_login') }}?register=true" class="google-btn">
+                <img src="https://www.gstatic.com/images/branding/product/1x/gsa_64dp.png" width="18" alt="">
+                Register with Google
+            </a>
+        {% endif %}
 
         <p style="text-align: center; margin-top: 20px;">
             Already have an account? <a href="{{ url_for('login') }}">Login</a>
@@ -88,18 +109,26 @@
     </div>
 </div>
 <script>
-    const roleSelect = document.querySelector('select[name="role"]');
+    const registrationForm = document.getElementById('registration-form');
+    const roleSelect = document.getElementById('registration-role');
     const landlordField = document.getElementById('landlord-field');
     const landlordSelect = document.getElementById('landlord_id');
     const passwordInput = document.getElementById('password');
     const strengthBar = document.getElementById('password-strength-bar');
     const strengthText = document.getElementById('password-strength-text');
+    const phoneInput = document.getElementById('contact_number');
+    const codeInput = document.getElementById('verification_code');
+    const codeFields = document.getElementById('verification-fields');
+    const sendCodeButton = document.getElementById('send-verification-code');
+    const completeButton = document.getElementById('complete-registration');
+    const verificationMessage = document.getElementById('verification-message');
+    let codeSentToPhone = registrationForm.dataset.codeSentToPhone || '';
 
     function updateLandlordField() {
+        if (!roleSelect || !landlordField || !landlordSelect) return;
         const isTenant = roleSelect.value === 'tenant';
         landlordField.hidden = !isTenant;
         landlordSelect.required = isTenant;
-        document.getElementById('contact_number').required = isTenant;
         if (!isTenant) landlordSelect.value = '';
     }
 
@@ -118,6 +147,7 @@
     }
 
     function updatePasswordMeter() {
+        if (!passwordInput || !strengthBar || !strengthText) return;
         const strength = passwordStrength(passwordInput.value);
         const widths = ['0%', '25%', '50%', '75%', '100%'];
         const colors = ['#d9534f', '#f0ad4e', '#f0ad4e', '#5bc0de', '#28a745'];
@@ -126,8 +156,70 @@
         strengthText.textContent = 'Password strength: ' + strength.label;
     }
 
-    roleSelect.addEventListener('change', updateLandlordField);
-    passwordInput.addEventListener('input', updatePasswordMeter);
+    if (roleSelect) roleSelect.addEventListener('change', updateLandlordField);
+    if (passwordInput) passwordInput.addEventListener('input', updatePasswordMeter);
+    phoneInput.addEventListener('input', function () {
+        if (phoneInput.value.trim() !== codeSentToPhone) {
+            codeSentToPhone = '';
+            codeInput.value = '';
+            codeInput.required = false;
+            codeFields.hidden = true;
+            completeButton.hidden = true;
+            sendCodeButton.hidden = false;
+            verificationMessage.textContent = 'Phone number changed. Send a new code to verify it.';
+        }
+    });
+    sendCodeButton.addEventListener('click', async function () {
+        const nameInput = registrationForm.elements.namedItem('name');
+        const emailInput = registrationForm.elements.namedItem('email');
+        const roleInput = registrationForm.elements.namedItem('role');
+        const landlordInput = registrationForm.elements.namedItem('landlord_id');
+        const payload = {
+            name: nameInput ? nameInput.value : '',
+            email: emailInput ? emailInput.value : '',
+            role: roleInput ? roleInput.value : '',
+            landlord_id: landlordInput ? landlordInput.value : '',
+            contact_number: phoneInput.value,
+            has_password: passwordInput ? Boolean(passwordInput.value) : true
+        };
+        const fieldsToValidate = [nameInput, emailInput, phoneInput, passwordInput];
+        if (roleInput) fieldsToValidate.push(roleInput);
+        if (roleInput && roleInput.value === 'tenant') fieldsToValidate.push(landlordInput);
+        for (const field of fieldsToValidate) {
+            if (field && !field.reportValidity()) return;
+        }
+        sendCodeButton.disabled = true;
+        verificationMessage.textContent = 'Sending verification code…';
+        try {
+            const response = await fetch(registrationForm.dataset.sendCodeUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.error || 'Could not send a verification code.');
+            codeSentToPhone = phoneInput.value.trim();
+            codeFields.hidden = false;
+            codeInput.required = true;
+            completeButton.hidden = false;
+            sendCodeButton.textContent = 'Resend verification code';
+            verificationMessage.textContent = result.message;
+            codeInput.focus();
+        } catch (error) {
+            verificationMessage.textContent = error.message;
+        } finally {
+            sendCodeButton.disabled = false;
+        }
+    });
+    registrationForm.addEventListener('submit', function (event) {
+        if (!codeSentToPhone || phoneInput.value.trim() !== codeSentToPhone) {
+            event.preventDefault();
+            verificationMessage.textContent = 'Send a verification code to your current phone number first.';
+            return;
+        }
+        completeButton.disabled = true;
+        completeButton.textContent = 'Verifying…';
+    });
     updateLandlordField();
     updatePasswordMeter();
 </script>
