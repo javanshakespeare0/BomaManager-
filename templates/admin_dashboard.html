@@ -155,7 +155,7 @@
                     <input type="hidden" name="next" value="{{ url_for('admin.admin_dashboard') }}">
                     <label for="plan-{{ row.user.id }}">Plan</label>
                     <select id="plan-{{ row.user.id }}" name="plan" required>
-                      <option value="basic"{% if row.user.subscription_plan != 'pro' %} selected{% endif %}>Basic</option>
+                      {% if row.room_count <= 20 %}<option value="basic"{% if row.user.subscription_plan != 'pro' %} selected{% endif %}>Basic</option>{% endif %}
                       <option value="pro"{% if row.user.subscription_plan == 'pro' %} selected{% endif %}>Pro</option>
                     </select>
                     <label for="days-{{ row.user.id }}">Duration (days)</label>

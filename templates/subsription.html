@@ -11,7 +11,7 @@
     <div>
       <p class="eyebrow">BomaManager billing</p>
       <h1>Choose your plan</h1>
-      <p class="muted">Keep your properties, rooms, and rent collection active.</p>
+      <p class="muted">Basic supports up to 20 rooms. Pro supports unlimited rooms and properties.</p>
     </div>
     <a href="{{ url_for('dashboard') }}" class="btn secondary-action">Back to dashboard</a>
   </header>
@@ -19,6 +19,16 @@
   {% with messages = get_flashed_messages() %}
     {% if messages %}<div class="flash">{{ messages[0] }}</div>{% endif %}
   {% endwith %}
+
+  {% if requires_pro %}
+    <section class="subscription-status status-locked">
+      <div>
+        <p class="eyebrow">Pro plan required</p>
+        <h2>You have {{ room_count }} rooms</h2>
+        <p>Basic covers a maximum of 20 rooms. Choose Pro to keep managing your current portfolio and add unlimited rooms and properties.</p>
+      </div>
+    </section>
+  {% endif %}
 
   {% if user.subscription_status == 'active' and user.subscription_expiry %}
     <section class="subscription-status status-active">
@@ -49,6 +59,7 @@
   {% endif %}
 
   <section class="plan-grid" aria-label="Subscription plans">
+    {% if not requires_pro %}
     <article class="plan-card">
       <div class="plan-card-header">
         <div>
@@ -85,6 +96,7 @@
         </details>
       </div>
     </article>
+    {% endif %}
 
     <article class="plan-card plan-card-featured">
       <div class="plan-card-header">
@@ -95,7 +107,7 @@
         <p class="plan-price">Ksh 1,000 <small>/ month</small></p>
       </div>
       <ul class="plan-features">
-        <li>Unlimited rooms</li>
+        <li>Unlimited rooms and properties</li>
         <li>Everything in Basic</li>
         <li>Reports and analytics</li>
         <li>Priority support</li>

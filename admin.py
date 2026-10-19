@@ -144,6 +144,7 @@ def landlord_detail(user_id):
         tenants=tenants,
         payments=payments,
         occupied_rooms=sum(room.is_occupied for room in rooms),
+        room_count=len(rooms),
     )
 
 @admin_bp.route('/admin/logout')
@@ -163,6 +164,9 @@ def activate_landlord(user_id):
     if details is None:
         return admin_redirect(url_for('admin.landlord_detail', user_id=landlord.id))
     plan, days = details
+    if plan == 'basic' and landlord.room_count() > 20:
+        flash('This landlord has more than 20 rooms and requires the Pro plan.', 'error')
+        return admin_redirect(url_for('admin.landlord_detail', user_id=landlord.id))
 
     landlord.subscription_status = 'active'
     landlord.subscription_plan = plan
@@ -202,6 +206,9 @@ def toggle_landlord(user_id):
         if details is None:
             return admin_redirect(url_for('admin.admin_dashboard'))
         plan, days = details
+        if plan == 'basic' and user.room_count() > 20:
+            flash('This landlord has more than 20 rooms and requires the Pro plan.', 'error')
+            return admin_redirect(url_for('admin.admin_dashboard'))
         user.subscription_status = 'active'
         user.subscription_plan = plan
         user.subscription_expiry = datetime.utcnow() + timedelta(days=days)

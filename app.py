@@ -165,13 +165,15 @@ class User(UserMixin, db.Model):
             return True
         return False
 
-    def can_add_more_rooms(self):
+    def room_count(self):
+        return Room.query.join(Property).filter(Property.landlord_id == self.id).count()
+
+    def can_add_more_rooms(self, additional_rooms=1):
         if not self.has_active_subscription():
             return False
         if self.subscription_plan == 'pro':
             return True
-        count = Room.query.join(Property).filter(Property.landlord_id == self.id).count()
-        return count < 20
+        return self.room_count() + additional_rooms <= 20
 
     def subscription_deadline(self):
         if self.role == 'admin':
@@ -1135,6 +1137,10 @@ def add_property():
     property_types = ['Apartment', 'Bedsitter', 'Single Room', 'One Bedroom', 'Two Bedroom', 'Three Bedroom', 'Studio', 'Hostel', 'Townhouse', 'Commercial Space']
     room_types = ['Single Room', 'Bedsitter', 'One Bedroom', 'Two Bedroom', 'Three Bedroom', 'Studio', 'Apartment', 'Hostel', 'Townhouse', 'Commercial Space']
 
+    if not current_user.can_add_more_rooms():
+        flash('Basic allows up to 20 rooms. Choose Pro to add more rooms and properties.', 'warning')
+        return redirect(url_for('subscription_page', upgrade='pro'))
+
     if request.method == 'POST':
         property_name = request.form.get('name', '').strip()
         location = request.form.get('location', '').strip()
@@ -1148,7 +1154,7 @@ def add_property():
         try:
             room_count = int(room_count)
         except (TypeError, ValueError):
-            room_count = 1
+            room_count = 0
 
         try:
             room_start = int(room_start)
@@ -1164,9 +1170,13 @@ def add_property():
             flash('Property name and location are required.')
             return render_template('add_property.html', property_types=property_types, room_types=room_types)
 
-        if room_count <= 0:
-            flash('Select a valid number of rooms to add.')
+        if not 1 <= room_count <= 200:
+            flash('Choose a valid number of rooms between 1 and 200.')
             return render_template('add_property.html', property_types=property_types, room_types=room_types)
+
+        if not current_user.can_add_more_rooms(room_count):
+            flash('Basic allows a maximum of 20 rooms. Choose Pro to add more rooms and properties.', 'warning')
+            return redirect(url_for('subscription_page', upgrade='pro'))
 
         if rent_amount <= 0:
             flash('Enter a valid rent amount for the rooms.')
@@ -1252,8 +1262,22 @@ def delete_property(prop_id):
 def add_room(prop_id):
     if current_user.role!= 'landlord': return "Access Denied"
     prop = Property.query.filter_by(id=prop_id, landlord_id=current_user.id).first_or_404()
+    if not current_user.can_add_more_rooms():
+        flash('Basic allows up to 20 rooms. Choose Pro to add more rooms and properties.', 'warning')
+        return redirect(url_for('subscription_page', upgrade='pro'))
     if request.method == 'POST':
-        room = Room(room_number=request.form['room_number'], rent_amount=request.form['rent'], property_id=prop_id)
+        room_number = request.form.get('room_number', '').strip()
+        try:
+            rent_amount = float(request.form.get('rent', ''))
+        except (TypeError, ValueError):
+            rent_amount = 0
+        if not room_number or rent_amount <= 0:
+            flash('Enter a room number and a valid rent amount.')
+            return render_template('add_room.html', prop=prop)
+        if not current_user.can_add_more_rooms():
+            flash('Basic allows a maximum of 20 rooms. Choose Pro to add more rooms and properties.', 'warning')
+            return redirect(url_for('subscription_page', upgrade='pro'))
+        room = Room(room_number=room_number, rent_amount=rent_amount, property_id=prop_id)
         db.session.add(room)
         db.session.commit()
         flash('Room Added!')
@@ -1652,16 +1676,28 @@ def payment_history():
 @app.route('/subscription')
 @login_required
 def subscription_page():
+    room_count = current_user.room_count() if current_user.role == 'landlord' else 0
+    requires_pro = current_user.role == 'landlord' and (
+        room_count > 20 or (request.args.get('upgrade') == 'pro' and room_count >= 20)
+    )
     return render_template('subsription.html',
                            user=current_user,
-                           days_left=current_user.days_remaining())
+                           days_left=current_user.days_remaining(),
+                           room_count=room_count,
+                           requires_pro=requires_pro)
 
 @app.route('/pay-subscription', methods=['POST'])
 @login_required
 def pay_subscription():
     plan = request.form.get('plan', 'basic')
     if plan not in {'basic', 'pro'}:
-        plan = 'basic'
+        flash('Choose a valid subscription plan.', 'danger')
+        return redirect(url_for('subscription_page'))
+    room_count = current_user.room_count() if current_user.role == 'landlord' else 0
+    requires_pro = current_user.role == 'landlord' and room_count > 20
+    if requires_pro and plan == 'basic':
+        flash('Your landlord account has more than 20 rooms. Choose Pro to continue.', 'danger')
+        return redirect(url_for('subscription_page'))
     phone = format_phone(request.form.get('phone'))
 
     if not phone:
@@ -1731,7 +1767,13 @@ def pay_subscription():
 def bank_subscription_payment():
     plan = request.form.get('plan', 'basic')
     if plan not in {'basic', 'pro'}:
-        plan = 'basic'
+        flash('Choose a valid subscription plan.', 'danger')
+        return redirect(url_for('subscription_page'))
+    room_count = current_user.room_count() if current_user.role == 'landlord' else 0
+    requires_pro = current_user.role == 'landlord' and room_count > 20
+    if requires_pro and plan == 'basic':
+        flash('Your landlord account has more than 20 rooms. Choose Pro to continue.', 'danger')
+        return redirect(url_for('subscription_page'))
     reference = (request.form.get('reference') or '').strip()
     if not reference:
         flash('Enter the bank transfer reference so we can confirm your payment.', 'danger')
@@ -1767,12 +1809,22 @@ def subscription_callback():
             landlord_id = session.get('pending_landlord_id')
 
         landlord = User.query.get(landlord_id)
+        if plan not in {'basic', 'pro'}:
+            app.logger.error('Subscription callback received an invalid plan for landlord %s', landlord_id)
+            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
+        if landlord and landlord.role == 'landlord' and landlord.room_count() > 20 and plan == 'basic':
+            app.logger.error('Rejected Basic subscription callback for landlord %s with more than 20 rooms', landlord_id)
+            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
         if landlord:
             landlord.subscription_status = 'active'
             landlord.subscription_plan = plan
             landlord.subscription_expiry = datetime.utcnow() + timedelta(days=30)
             db.session.commit()
-            print(f"✅ Subscription activated: Landlord {landlord_id} | Plan {plan} | 30 days")
+            app.logger.info(
+                'Subscription activated: landlord %s, plan %s, 30 days',
+                landlord_id,
+                plan,
+            )
 
     except Exception as e:
         print(f"Sub callback error: {e}")

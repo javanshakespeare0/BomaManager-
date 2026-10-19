@@ -73,7 +73,7 @@
         <input type="hidden" name="next" value="{{ url_for('admin.landlord_detail', user_id=landlord.id) }}">
         <label for="plan">Plan</label>
         <select id="plan" name="plan" required>
-          <option value="basic"{% if landlord.subscription_plan != 'pro' %} selected{% endif %}>Basic</option>
+          {% if room_count <= 20 %}<option value="basic"{% if landlord.subscription_plan != 'pro' %} selected{% endif %}>Basic</option>{% endif %}
           <option value="pro"{% if landlord.subscription_plan == 'pro' %} selected{% endif %}>Pro</option>
         </select>
         <label for="days">Duration in days</label>
