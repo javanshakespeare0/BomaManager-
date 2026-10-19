@@ -4,6 +4,7 @@ from functools import wraps
 from datetime import datetime, timedelta
 import secrets
 import os
+from urllib.parse import urlsplit
 from sqlalchemy import or_
 
 admin_bp = Blueprint('admin', __name__)
@@ -29,6 +30,37 @@ def record_admin_action(db, AuditLog, action, target_email):
         action=action,
         target_email=target_email,
     ))
+
+def activation_details(default_plan='basic'):
+    plan = request.form.get('plan', default_plan).strip().lower()
+    if plan not in {'basic', 'pro'}:
+        flash('Choose a valid subscription plan.', 'error')
+        return None
+
+    try:
+        days = int(request.form.get('days', 30))
+    except (TypeError, ValueError):
+        flash('Enter a valid subscription duration between 1 and 366 days.', 'error')
+        return None
+    if not 1 <= days <= 366:
+        flash('Enter a valid subscription duration between 1 and 366 days.', 'error')
+        return None
+
+    return plan, days
+
+def admin_redirect(default):
+    target = request.form.get('next', '')
+    parsed = urlsplit(target)
+    is_local_path = (
+        target.startswith('/')
+        and not target.startswith('//')
+        and '\\' not in target
+        and not parsed.scheme
+        and not parsed.netloc
+    )
+    if is_local_path:
+        return redirect(target)
+    return redirect(default)
 
 @admin_bp.route('/admin/login', methods=['GET', 'POST'])
 def admin_login():
@@ -127,13 +159,10 @@ def activate_landlord(user_id):
     from app import AuditLog, User, db
 
     landlord = User.query.filter_by(id=user_id, role='landlord').first_or_404()
-    plan = request.form.get('plan', 'basic')
-    if plan not in {'basic', 'pro'}:
-        plan = 'basic'
-    try:
-        days = max(1, min(366, int(request.form.get('days', 30))))
-    except (TypeError, ValueError):
-        days = 30
+    details = activation_details()
+    if details is None:
+        return admin_redirect(url_for('admin.landlord_detail', user_id=landlord.id))
+    plan, days = details
 
     landlord.subscription_status = 'active'
     landlord.subscription_plan = plan
@@ -141,7 +170,7 @@ def activate_landlord(user_id):
     record_admin_action(db, AuditLog, f'Activated {plan} plan for {days} days', landlord.email)
     db.session.commit()
     flash(f'{landlord.email} activated on the {plan} plan for {days} days.', 'success')
-    return redirect(request.form.get('next') or url_for('admin.landlord_detail', user_id=landlord.id))
+    return admin_redirect(url_for('admin.landlord_detail', user_id=landlord.id))
 
 @admin_bp.route('/admin/landlord/<int:user_id>/deactivate', methods=['POST'])
 @admin_required
@@ -154,7 +183,7 @@ def deactivate_landlord(user_id):
     record_admin_action(db, AuditLog, 'Deactivated subscription', landlord.email)
     db.session.commit()
     flash(f'{landlord.email} subscription deactivated.', 'success')
-    return redirect(request.form.get('next') or url_for('admin.landlord_detail', user_id=landlord.id))
+    return admin_redirect(url_for('admin.landlord_detail', user_id=landlord.id))
 
 @admin_bp.route('/admin/toggle-landlord/<int:user_id>', methods=['POST'])
 @admin_required
@@ -168,15 +197,20 @@ def toggle_landlord(user_id):
         message = f'{user.email} subscription deactivated.'
         action = 'Deactivated subscription'
     else:
+        current_plan = user.subscription_plan if user.subscription_plan in {'basic', 'pro'} else 'basic'
+        details = activation_details(current_plan)
+        if details is None:
+            return admin_redirect(url_for('admin.admin_dashboard'))
+        plan, days = details
         user.subscription_status = 'active'
-        user.subscription_plan = user.subscription_plan if user.subscription_plan in {'basic', 'pro'} else 'basic'
-        user.subscription_expiry = datetime.utcnow() + timedelta(days=30)
-        message = f'{user.email} subscription activated for 30 days.'
-        action = 'Activated basic plan for 30 days'
+        user.subscription_plan = plan
+        user.subscription_expiry = datetime.utcnow() + timedelta(days=days)
+        message = f'{user.email} activated on the {plan} plan for {days} days.'
+        action = f'Activated {plan} plan for {days} days'
     record_admin_action(db, AuditLog, action, user.email)
     db.session.commit()
     flash(message, 'success')
-    return redirect(request.form.get('next') or url_for('admin.admin_dashboard'))
+    return admin_redirect(url_for('admin.admin_dashboard'))
 
 @admin_bp.route('/admin/landlord/<int:user_id>/reset-password', methods=['POST'])
 @admin_required

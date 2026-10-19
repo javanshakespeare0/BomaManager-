@@ -43,8 +43,9 @@
     .action-menu summary { list-style: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; color: #dcebe7; background: #225f57; border: 1px solid #4a8e82; border-radius: 7px; cursor: pointer; font-size: 1.25rem; line-height: 1; }
     .action-menu summary::-webkit-details-marker { display: none; }
     .action-menu summary:hover, .action-menu[open] summary { background: #35a08f; }
-    .action-menu-items { position: absolute; right: 0; top: calc(100% + 6px); z-index: 10; display: grid; min-width: 170px; padding: 6px; background: #172a28; border: 1px solid #4a6d66; border-radius: 8px; box-shadow: 0 12px 24px rgba(0, 0, 0, .35); }
+    .action-menu-items { position: absolute; right: 0; top: calc(100% + 6px); z-index: 10; display: grid; min-width: 220px; padding: 6px; background: #172a28; border: 1px solid #4a6d66; border-radius: 8px; box-shadow: 0 12px 24px rgba(0, 0, 0, .35); }
     .action-menu-items a, .action-menu-items button { display: block; width: 100%; box-sizing: border-box; padding: 9px 10px; color: #e8f2ef; background: transparent; border: 0; border-radius: 5px; text-align: left; font: 700 .78rem Arial, sans-serif; box-shadow: none; }
+    .action-menu-items select, .action-menu-items input { display: block; width: 100%; box-sizing: border-box; margin: 4px 0 8px; padding: 7px; border: 1px solid #38504c; border-radius: 5px; background: #162725; color: #ecf3f1; }
     .action-menu-items a:hover, .action-menu-items button:hover { background: rgba(53, 160, 143, .2); transform: none; box-shadow: none; }
     .action-menu-items .danger-action { color: #ffb5aa; }
     .action-menu-items .danger-action:hover { background: rgba(196, 81, 69, .2); }
@@ -144,13 +145,22 @@
                 <summary aria-label="Actions for {{ row.user.name or row.user.email }}"><span aria-hidden="true">&#8942;</span></summary>
                 <div class="action-menu-items">
                   <a href="{{ url_for('admin.landlord_detail', user_id=row.user.id) }}">View details</a>
-                  <form method="POST" action="{{ url_for('admin.toggle_landlord', user_id=row.user.id) }}">
-                  <input type="hidden" name="next" value="{{ url_for('admin.admin_dashboard') }}">
                   {% if row.user.subscription_status == 'active' %}
-                  <button type="submit">Deactivate</button>
-                  {% else %}
-                  <button type="submit">Activate</button>
+                  <form method="POST" action="{{ url_for('admin.deactivate_landlord', user_id=row.user.id) }}">
+                    <input type="hidden" name="next" value="{{ url_for('admin.admin_dashboard') }}">
+                    <button type="submit">Deactivate</button>
+                  </form>
                   {% endif %}
+                  <form method="POST" action="{{ url_for('admin.activate_landlord', user_id=row.user.id) }}">
+                    <input type="hidden" name="next" value="{{ url_for('admin.admin_dashboard') }}">
+                    <label for="plan-{{ row.user.id }}">Plan</label>
+                    <select id="plan-{{ row.user.id }}" name="plan" required>
+                      <option value="basic"{% if row.user.subscription_plan != 'pro' %} selected{% endif %}>Basic</option>
+                      <option value="pro"{% if row.user.subscription_plan == 'pro' %} selected{% endif %}>Pro</option>
+                    </select>
+                    <label for="days-{{ row.user.id }}">Duration (days)</label>
+                    <input id="days-{{ row.user.id }}" type="number" name="days" value="30" min="1" max="366" required>
+                    <button type="submit">{% if row.user.subscription_status == 'active' %}Update plan{% else %}Activate{% endif %}</button>
                   </form>
                   <form method="POST" action="{{ url_for('admin.reset_landlord_password', user_id=row.user.id) }}" onsubmit="return confirm('Generate a temporary password for this landlord? They will be required to create a new password after logging in.');">
                     <button type="submit">Reset password</button>
