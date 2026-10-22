@@ -168,9 +168,11 @@ def activate_landlord(user_id):
         flash('This landlord has more than 20 rooms and requires the Pro plan.', 'error')
         return admin_redirect(url_for('admin.landlord_detail', user_id=landlord.id))
 
+    updated_at = datetime.utcnow()
     landlord.subscription_status = 'active'
     landlord.subscription_plan = plan
-    landlord.subscription_expiry = datetime.utcnow() + timedelta(days=days)
+    landlord.subscription_expiry = updated_at + timedelta(days=days)
+    landlord.subscription_admin_updated_at = updated_at
     record_admin_action(db, AuditLog, f'Activated {plan} plan for {days} days', landlord.email)
     db.session.commit()
     flash(f'{landlord.email} activated on the {plan} plan for {days} days.', 'success')
@@ -182,8 +184,10 @@ def deactivate_landlord(user_id):
     from app import AuditLog, User, db
 
     landlord = User.query.filter_by(id=user_id, role='landlord').first_or_404()
+    updated_at = datetime.utcnow()
     landlord.subscription_status = 'expired'
-    landlord.subscription_expiry = datetime.utcnow()
+    landlord.subscription_expiry = updated_at
+    landlord.subscription_admin_updated_at = updated_at
     record_admin_action(db, AuditLog, 'Deactivated subscription', landlord.email)
     db.session.commit()
     flash(f'{landlord.email} subscription deactivated.', 'success')
@@ -196,8 +200,10 @@ def toggle_landlord(user_id):
 
     user = User.query.filter_by(id=user_id, role='landlord').first_or_404()
     if user.subscription_status == 'active':
+        updated_at = datetime.utcnow()
         user.subscription_status = 'expired'
-        user.subscription_expiry = datetime.utcnow()
+        user.subscription_expiry = updated_at
+        user.subscription_admin_updated_at = updated_at
         message = f'{user.email} subscription deactivated.'
         action = 'Deactivated subscription'
     else:
@@ -209,9 +215,11 @@ def toggle_landlord(user_id):
         if plan == 'basic' and user.room_count() > 20:
             flash('This landlord has more than 20 rooms and requires the Pro plan.', 'error')
             return admin_redirect(url_for('admin.admin_dashboard'))
+        updated_at = datetime.utcnow()
         user.subscription_status = 'active'
         user.subscription_plan = plan
-        user.subscription_expiry = datetime.utcnow() + timedelta(days=days)
+        user.subscription_expiry = updated_at + timedelta(days=days)
+        user.subscription_admin_updated_at = updated_at
         message = f'{user.email} activated on the {plan} plan for {days} days.'
         action = f'Activated {plan} plan for {days} days'
     record_admin_action(db, AuditLog, action, user.email)

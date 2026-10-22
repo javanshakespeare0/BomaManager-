@@ -12,7 +12,6 @@ from functools import wraps
 from maintenance import is_maintenance_on, set_maintenance
 if os.getenv('FLASK_ENV', 'production').lower() == 'development':
     os.environ.setdefault('OAUTHLIB_INSECURE_TRANSPORT', '1')
-
 try:
     import requests
     from requests.auth import HTTPBasicAuth
@@ -152,6 +151,7 @@ class User(UserMixin, db.Model):
     subscription_status = db.Column(db.String(20), default='trial')
     subscription_plan = db.Column(db.String(20), default='basic')
     subscription_expiry = db.Column(db.DateTime, nullable=True)
+    subscription_admin_updated_at = db.Column(db.DateTime, nullable=True)
     trial_ends_at = db.Column(db.DateTime, default=lambda: datetime.utcnow() + timedelta(days=14))
 
     def has_active_subscription(self):
@@ -288,6 +288,15 @@ class RegistrationPhoneChallenge(db.Model):
     attempts = db.Column(db.Integer, nullable=False, default=0)
     consumed_at = db.Column(db.DateTime, nullable=True)
 
+class SubscriptionPaymentAttempt(db.Model):
+    checkout_request_id = db.Column(db.String(100), primary_key=True)
+    merchant_request_id = db.Column(db.String(100), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    plan = db.Column(db.String(20), nullable=False)
+    requested_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    processed_at = db.Column(db.DateTime, nullable=True)
+    outcome = db.Column(db.String(20), nullable=False, default='pending')
+
 
 with app.app_context():
     db.create_all()
@@ -318,6 +327,7 @@ def ensure_user_columns():
         'subscription_status': "VARCHAR(20) DEFAULT 'trial'",
         'subscription_plan': "VARCHAR(20) DEFAULT 'basic'",
         'subscription_expiry': 'DATETIME',
+        'subscription_admin_updated_at': 'DATETIME',
         'trial_ends_at': 'DATETIME',
     }
     with db.engine.begin() as connection:
@@ -330,6 +340,9 @@ def ensure_user_columns():
                 'WHERE trial_ends_at IS NULL AND is_landlord = 1',
                 {'trial_end': datetime.utcnow() + timedelta(days=14)},
             )
+
+with app.app_context():
+    ensure_user_columns()
 
 
 def ensure_payout_columns():
@@ -1710,9 +1723,6 @@ def pay_subscription():
 
     amount = 500 if plan == 'basic' else 1000
 
-    session['pending_plan'] = plan
-    session['pending_landlord_id'] = current_user.id
-
     if not PASSKEY or not CONSUMER_KEY or not CONSUMER_SECRET:
         flash('M-Pesa is not configured yet. Set the Daraja credentials in the environment.', 'danger')
         return redirect(url_for('subscription_page'))
@@ -1746,6 +1756,7 @@ def pay_subscription():
 
     url = f"{DARAJA_BASE_URL}/mpesa/stkpush/v1/processrequest"
     headers = {"Authorization": f"Bearer {access_token}"}
+    requested_at = datetime.utcnow()
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=20)
         response_data = response.json()
@@ -1756,6 +1767,34 @@ def pay_subscription():
 
     print('Subscription STK response:', response_data)
     if str(response_data.get('ResponseCode')) == '0':
+        checkout_request_id = response_data.get('CheckoutRequestID')
+        if not checkout_request_id:
+            app.logger.error(
+                'Daraja accepted subscription payment for landlord %s without a CheckoutRequestID',
+                current_user.id,
+            )
+            flash('M-Pesa accepted the request, but we could not track its confirmation. Contact support before retrying.', 'danger')
+            return redirect(url_for('subscription_page'))
+
+        payment_attempt = SubscriptionPaymentAttempt(
+            checkout_request_id=checkout_request_id,
+            merchant_request_id=response_data.get('MerchantRequestID'),
+            user_id=current_user.id,
+            plan=plan,
+            requested_at=requested_at,
+        )
+        try:
+            db.session.add(payment_attempt)
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            app.logger.exception(
+                'Could not record subscription payment attempt %s for landlord %s',
+                checkout_request_id,
+                current_user.id,
+            )
+            flash('M-Pesa accepted the request, but confirmation tracking failed. Contact support before retrying.', 'danger')
+            return redirect(url_for('subscription_page'))
         flash(f'STK Push sent to {phone} for Ksh {amount}. Enter your M-Pesa PIN.', 'success')
     else:
         message = response_data.get('errorMessage') or response_data.get('ResponseDescription') or 'M-Pesa rejected the request.'
@@ -1779,58 +1818,100 @@ def bank_subscription_payment():
         flash('Enter the bank transfer reference so we can confirm your payment.', 'danger')
         return redirect(url_for('subscription_page'))
 
-    session['pending_plan'] = plan
     session['bank_payment_reference'] = reference
-    session['pending_landlord_id'] = current_user.id
     flash('Bank payment details received. Your subscription will activate after the transfer is confirmed.', 'success')
     return redirect(url_for('subscription_page'))
 
 @app.route('/api/mpesa/callback/subscription', methods=['POST'])
 def subscription_callback():
-    data = request.get_json()
-    print("SUB CALLBACK:", data)
     try:
+        data = request.get_json(silent=True) or {}
         cb = data['Body']['stkCallback']
         if str(cb['ResultCode']) != '0':
             return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
 
-        meta = {i['Name']: i.get('Value') for i in cb['CallbackMetadata']['Item']}
-        account_ref = meta.get('AccountReference', '')
-
-        parts = account_ref.split('_')
-        landlord_id = None
-        plan = 'basic'
-
-        if len(parts) >= 3 and parts[0] == 'SUB' and parts[1].startswith('Landlord'):
-            landlord_id = int(re.sub(r'[^0-9]', '', parts[1]))
-            plan = parts[2]
-
-        if landlord_id is None:
-            landlord_id = session.get('pending_landlord_id')
-
-        landlord = User.query.get(landlord_id)
-        if plan not in {'basic', 'pro'}:
-            app.logger.error('Subscription callback received an invalid plan for landlord %s', landlord_id)
+        checkout_request_id = cb.get('CheckoutRequestID')
+        if not checkout_request_id:
+            app.logger.error('Subscription callback did not include a CheckoutRequestID')
             return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
-        if landlord and landlord.role == 'landlord' and landlord.room_count() > 20 and plan == 'basic':
-            app.logger.error('Rejected Basic subscription callback for landlord %s with more than 20 rooms', landlord_id)
+
+        attempt = SubscriptionPaymentAttempt.query.filter_by(
+            checkout_request_id=checkout_request_id
+        ).first()
+        if not attempt:
+            app.logger.error(
+                'Ignoring unrecognized subscription callback for checkout %s',
+                checkout_request_id,
+            )
             return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
-        if landlord:
-            landlord.subscription_status = 'active'
-            landlord.subscription_plan = plan
-            landlord.subscription_expiry = datetime.utcnow() + timedelta(days=30)
+        if attempt.processed_at:
+            app.logger.info(
+                'Ignoring duplicate subscription callback for checkout %s',
+                checkout_request_id,
+            )
+            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
+
+        landlord = db.session.get(User, attempt.user_id)
+        if (
+            not landlord
+            or landlord.role != 'landlord'
+            or attempt.plan not in {'basic', 'pro'}
+            or (
+                attempt.merchant_request_id
+                and cb.get('MerchantRequestID') != attempt.merchant_request_id
+            )
+        ):
+            attempt.outcome = 'rejected'
+            attempt.processed_at = datetime.utcnow()
+            db.session.commit()
+            app.logger.error(
+                'Rejected invalid subscription payment attempt %s for landlord %s',
+                checkout_request_id,
+                attempt.user_id,
+            )
+            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
+
+        if (
+            landlord.subscription_admin_updated_at
+            and attempt.requested_at <= landlord.subscription_admin_updated_at
+        ):
+            attempt.outcome = 'superseded'
+            attempt.processed_at = datetime.utcnow()
             db.session.commit()
             app.logger.info(
-                'Subscription activated: landlord %s, plan %s, 30 days',
-                landlord_id,
-                plan,
+                'Ignored subscription callback %s because a later admin action updated landlord %s',
+                checkout_request_id,
+                landlord.id,
             )
+            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
 
-    except Exception as e:
-        print(f"Sub callback error: {e}")
-        import traceback
-        traceback.print_exc()
+        if attempt.plan == 'basic' and landlord.room_count() > 20:
+            attempt.outcome = 'rejected'
+            attempt.processed_at = datetime.utcnow()
+            db.session.commit()
+            app.logger.error(
+                'Rejected Basic subscription callback for landlord %s with more than 20 rooms',
+                landlord.id,
+            )
+            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
 
+        landlord.subscription_status = 'active'
+        landlord.subscription_plan = attempt.plan
+        landlord.subscription_expiry = datetime.utcnow() + timedelta(days=30)
+        attempt.outcome = 'activated'
+        attempt.processed_at = datetime.utcnow()
+        db.session.commit()
+        app.logger.info(
+            'Subscription activated: landlord %s, plan %s, 30 days',
+            landlord.id,
+            attempt.plan,
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        db.session.rollback()
+        app.logger.error('Invalid subscription callback payload: %s', error)
+    except SQLAlchemyError:
+        db.session.rollback()
+        app.logger.exception('Database error processing subscription callback')
     return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
 @app.route('/logout')
 @login_required
