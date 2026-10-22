@@ -322,30 +322,37 @@ def get_access_token():
 def ensure_user_columns():
     columns = {column['name'] for column in inspect(db.engine).get_columns('user')}
     additions = {
-        'must_change_password': 'BOOLEAN DEFAULT 0',
-        'password_reset_token': 'VARCHAR(255)',
-        'password_reset_expires': 'DATETIME',
-        'mpesa_till': 'VARCHAR(20)',
-        'mpesa_type': 'VARCHAR(20)',
-        'account_number': 'VARCHAR(100)',
-        'bank_name': 'VARCHAR(100)',
-        'is_landlord': 'BOOLEAN DEFAULT 0',
-        'subscription_status': "VARCHAR(20) DEFAULT 'trial'",
-        'subscription_plan': "VARCHAR(20) DEFAULT 'basic'",
-        'subscription_expiry': 'DATETIME',
-        'subscription_admin_updated_at': 'DATETIME',
-        'trial_ends_at': 'DATETIME',
+        'must_change_password': (db.Boolean(), 'FALSE'),
+        'password_reset_token': (db.String(255), None),
+        'password_reset_expires': (db.DateTime(), None),
+        'mpesa_till': (db.String(20), None),
+        'mpesa_type': (db.String(20), None),
+        'account_number': (db.String(100), None),
+        'bank_name': (db.String(100), None),
+        'is_landlord': (db.Boolean(), 'FALSE'),
+        'subscription_status': (db.String(20), "'trial'"),
+        'subscription_plan': (db.String(20), "'basic'"),
+        'subscription_expiry': (db.DateTime(), None),
+        'subscription_admin_updated_at': (db.DateTime(), None),
+        'trial_ends_at': (db.DateTime(), None),
     }
     with db.engine.begin() as connection:
-        for name, column_type in additions.items():
+        preparer = connection.dialect.identifier_preparer
+        table_name = preparer.quote(User.__tablename__)
+        for name, (column_type, default) in additions.items():
             if name not in columns:
-                connection.exec_driver_sql(f'ALTER TABLE user ADD COLUMN {name} {column_type}')
-        if 'trial_ends_at' in columns or 'trial_ends_at' in additions:
-            connection.exec_driver_sql(
-                'UPDATE user SET trial_ends_at = :trial_end '
-                'WHERE trial_ends_at IS NULL AND is_landlord = 1',
-                {'trial_end': datetime.utcnow() + timedelta(days=14)},
-            )
+                column_name = preparer.quote(name)
+                compiled_type = column_type.compile(dialect=connection.dialect)
+                default_sql = f' DEFAULT {default}' if default else ''
+                connection.exec_driver_sql(
+                    f'ALTER TABLE {table_name} ADD COLUMN {column_name} {compiled_type}{default_sql}'
+                )
+        connection.execute(
+            User.__table__.update().where(
+                User.trial_ends_at.is_(None),
+                User.is_landlord.is_(True),
+            ).values(trial_ends_at=datetime.utcnow() + timedelta(days=14))
+        )
 
 with app.app_context():
     ensure_user_columns()
