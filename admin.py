@@ -31,6 +31,16 @@ def record_admin_action(db, AuditLog, action, target_email):
         target_email=target_email,
     ))
 
+def effective_subscription_status(landlord, now=None):
+    now = now or datetime.utcnow()
+    if landlord.subscription_status == 'active':
+        if not landlord.subscription_expiry or landlord.subscription_expiry <= now:
+            return 'expired'
+    elif landlord.subscription_status == 'trial':
+        if not landlord.trial_ends_at or landlord.trial_ends_at <= now:
+            return 'expired'
+    return landlord.subscription_status
+
 def activation_details(default_plan='basic'):
     plan = request.form.get('plan', default_plan).strip().lower()
     if plan not in {'basic', 'pro'}:
@@ -87,20 +97,22 @@ def admin_dashboard():
     landlord_query = User.query.filter_by(role='landlord')
     if search:
         landlord_query = landlord_query.filter(or_(User.name.ilike(f'%{search}%'), User.email.ilike(f'%{search}%')))
-    if status in {'active', 'expired', 'trial'}:
-        landlord_query = landlord_query.filter_by(subscription_status=status)
     landlords = landlord_query.order_by(User.id.desc()).all()
     landlord_rows = []
+    now = datetime.utcnow()
     for landlord in landlords:
         properties = Property.query.filter_by(landlord_id=landlord.id).all()
         rooms = [room for property in properties for room in property.rooms]
         landlord_rows.append({
             'user': landlord,
+            'subscription_status': effective_subscription_status(landlord, now),
             'property_count': len(properties),
             'room_count': len(rooms),
             'occupied_count': sum(room.is_occupied for room in rooms),
             'tenant_count': User.query.filter_by(landlord_id=landlord.id, role='tenant').count(),
         })
+    if status in {'active', 'expired', 'trial'}:
+        landlord_rows = [row for row in landlord_rows if row['subscription_status'] == status]
 
     total_properties = Property.query.count()
     total_rooms = Room.query.count()
@@ -111,7 +123,7 @@ def admin_dashboard():
     maintenance_state = is_maintenance_on()
 
     return render_template('admin_dashboard.html',
-                         total_landlords=len(landlords),
+                         total_landlords=len(landlord_rows),
                          total_properties=total_properties,
                          total_rooms=total_rooms,
                          total_tenants=total_tenants,

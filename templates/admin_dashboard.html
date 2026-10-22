@@ -145,7 +145,7 @@
                 <summary aria-label="Actions for {{ row.user.name or row.user.email }}"><span aria-hidden="true">&#8942;</span></summary>
                 <div class="action-menu-items">
                   <a href="{{ url_for('admin.landlord_detail', user_id=row.user.id) }}">View details</a>
-                  {% if row.user.subscription_status == 'active' %}
+                  {% if row.subscription_status == 'active' %}
                   <form method="POST" action="{{ url_for('admin.deactivate_landlord', user_id=row.user.id) }}">
                     <input type="hidden" name="next" value="{{ url_for('admin.admin_dashboard') }}">
                     <button type="submit">Deactivate</button>
@@ -160,7 +160,7 @@
                     </select>
                     <label for="days-{{ row.user.id }}">Duration (days)</label>
                     <input id="days-{{ row.user.id }}" type="number" name="days" value="30" min="1" max="366" required>
-                    <button type="submit">{% if row.user.subscription_status == 'active' %}Update plan{% else %}Activate{% endif %}</button>
+                    <button type="submit">{% if row.subscription_status == 'active' %}Update plan{% else %}Activate{% endif %}</button>
                   </form>
                   <form method="POST" action="{{ url_for('admin.reset_landlord_password', user_id=row.user.id) }}" onsubmit="return confirm('Generate a temporary password for this landlord? They will be required to create a new password after logging in.');">
                     <button type="submit">Reset password</button>
@@ -171,7 +171,7 @@
                 </div>
               </details>
             </td>
-            <td data-label="Subscription"><span class="status {{ row.user.subscription_status }}">{{ row.user.subscription_status }}</span><br><span class="muted">{{ row.user.subscription_plan }}</span>{% if row.user.subscription_expiry %}<span class="expiry">Until {{ row.user.subscription_expiry.strftime('%d %b %Y') }}</span>{% endif %}</td>
+            <td data-label="Subscription"><span class="status {{ row.subscription_status }}">{{ row.subscription_status }}</span><br><span class="muted">{{ row.user.subscription_plan }}</span>{% if row.user.subscription_expiry %}<span class="expiry">Until {{ row.user.subscription_expiry.strftime('%d %b %Y') }}</span>{% endif %}</td>
             <td data-label="Properties">{{ row.property_count }}</td>
             <td data-label="Rooms">{{ row.room_count }}</td>
             <td data-label="Occupied">{{ row.occupied_count }}</td>

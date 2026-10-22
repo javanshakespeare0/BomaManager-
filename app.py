@@ -35,7 +35,13 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY') or (
 )
 if not app.config['SECRET_KEY']:
     raise RuntimeError('SECRET_KEY must be configured in the environment')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///bomamanager.db'
+database_url = os.getenv('DATABASE_URL')
+if database_url:
+    if database_url.startswith('postgres://'):
+        database_url = 'postgresql://' + database_url[len('postgres://'):]
+    if database_url.startswith('postgresql://'):
+        database_url = 'postgresql+psycopg://' + database_url[len('postgresql://'):]
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url or 'sqlite:///bomamanager.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
@@ -645,6 +651,12 @@ def register():
                 'register.html', landlords=landlords, google_registration=bool(google_registration),
                 form_values=form_values, verification_sent=registration_challenge_matches(challenge, email, contact_number),
             )
+        if not google_registration and password != request.form.get('confirm_password', ''):
+            flash('Passwords do not match.')
+            return render_template(
+                'register.html', landlords=landlords, google_registration=False,
+                form_values=form_values, verification_sent=registration_challenge_matches(challenge, email, contact_number),
+            )
         if not contact_number:
             flash('Enter a valid phone number, including the country code if outside Kenya.')
             return render_template(
@@ -982,8 +994,14 @@ def dashboard():
         room_ids = [room.id for prop in properties for room in prop.rooms]
         payments = Payment.query.filter(Payment.room_id.in_(room_ids), Payment.month.in_(period_keys)).all() if room_ids and period_keys else []
         payments_by_room = {room_id: get_payment_summary(room, current_period_by_room[room_id]['key']) for room_id, room in [(room.id, room) for prop in properties for room in prop.rooms] if current_period_by_room[room_id]}
-        current_month = datetime.now().strftime('%Y-%m')
-        total_month_collection = db.session.query(db.func.sum(Payment.amount)).join(Room).join(Property).filter(Property.landlord_id == current_user.id, db.func.strftime('%Y-%m', Payment.date_paid) == current_month).scalar() or 0
+        now = datetime.utcnow()
+        month_start = datetime(now.year, now.month, 1)
+        next_month = datetime(now.year + (now.month == 12), now.month % 12 + 1, 1)
+        total_month_collection = db.session.query(db.func.sum(Payment.amount)).join(Room).join(Property).filter(
+            Property.landlord_id == current_user.id,
+            Payment.date_paid >= month_start,
+            Payment.date_paid < next_month,
+        ).scalar() or 0
         total_rooms = sum(len(prop.rooms) for prop in properties)
         occupied_rooms = sum(room.is_occupied for prop in properties for room in prop.rooms)
         subscription_deadline = current_user.subscription_deadline()

@@ -63,6 +63,8 @@
                     <div id="password-strength-bar" class="password-strength-bar"></div>
                 </div>
                 <small id="password-strength-text" class="password-strength-text">Password strength:—</small>
+                <label for="confirm-password">Confirm password</label>
+                <input type="password" name="confirm_password" id="confirm-password" placeholder="Re-enter password" required autocomplete="new-password" style="width: 100%; padding: 10px; margin-top: 8px; margin-bottom: 10px;">
                 <select name="role" id="registration-role" required style="width: 100%; padding: 10px; margin-top: 12px; margin-bottom: 15px;">
                     <option value="">-- Select Role --</option>
                     <option value="landlord"{% if form_values.get('role') == 'landlord' %} selected{% endif %}>Landlord</option>
@@ -114,6 +116,7 @@
     const landlordField = document.getElementById('landlord-field');
     const landlordSelect = document.getElementById('landlord_id');
     const passwordInput = document.getElementById('password');
+    const confirmPasswordInput = document.getElementById('confirm-password');
     const strengthBar = document.getElementById('password-strength-bar');
     const strengthText = document.getElementById('password-strength-text');
     const phoneInput = document.getElementById('contact_number');
@@ -156,8 +159,19 @@
         strengthText.textContent = 'Password strength: ' + strength.label;
     }
 
+    function validatePasswordConfirmation() {
+        if (!passwordInput || !confirmPasswordInput) return true;
+        const mismatch = confirmPasswordInput.value && passwordInput.value !== confirmPasswordInput.value;
+        confirmPasswordInput.setCustomValidity(mismatch ? 'Passwords do not match.' : '');
+        return !mismatch;
+    }
+
     if (roleSelect) roleSelect.addEventListener('change', updateLandlordField);
-    if (passwordInput) passwordInput.addEventListener('input', updatePasswordMeter);
+    if (passwordInput) passwordInput.addEventListener('input', function () {
+        updatePasswordMeter();
+        validatePasswordConfirmation();
+    });
+    if (confirmPasswordInput) confirmPasswordInput.addEventListener('input', validatePasswordConfirmation);
     phoneInput.addEventListener('input', function () {
         if (phoneInput.value.trim() !== codeSentToPhone) {
             codeSentToPhone = '';
@@ -183,8 +197,10 @@
             has_password: passwordInput ? Boolean(passwordInput.value) : true
         };
         const fieldsToValidate = [nameInput, emailInput, phoneInput, passwordInput];
+        if (confirmPasswordInput) fieldsToValidate.push(confirmPasswordInput);
         if (roleInput) fieldsToValidate.push(roleInput);
         if (roleInput && roleInput.value === 'tenant') fieldsToValidate.push(landlordInput);
+        validatePasswordConfirmation();
         for (const field of fieldsToValidate) {
             if (field && !field.reportValidity()) return;
         }
@@ -212,6 +228,11 @@
         }
     });
     registrationForm.addEventListener('submit', function (event) {
+        validatePasswordConfirmation();
+        if (!registrationForm.reportValidity()) {
+            event.preventDefault();
+            return;
+        }
         if (!codeSentToPhone || phoneInput.value.trim() !== codeSentToPhone) {
             event.preventDefault();
             verificationMessage.textContent = 'Send a verification code to your current phone number first.';
