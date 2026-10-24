@@ -26,18 +26,40 @@
 </head>
 <body>
 <div class="container">
-    <h1>Welcome to BomaManager! 👋</h1>
-    <p>One last step: How will you use BomaManager?</p>
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}<p role="alert">{{ messages[0] }}</p>{% endif %}
+    {% endwith %}
+    {% if choosing_tenant %}
+        <h1>Choose your landlord</h1>
+        <p>Select the landlord whose rooms you want to browse.</p>
+        {% if landlords %}
+            <form method="POST" action="{{ url_for('set_role', role='tenant') }}">
+                <select name="landlord_id" required style="width: 100%; padding: 12px; margin: 15px 0;">
+                    <option value="">-- Select Your Landlord --</option>
+                    {% for landlord in landlords %}
+                        <option value="{{ landlord.id }}">{{ landlord.name or landlord.email }}</option>
+                    {% endfor %}
+                </select>
+                <button class="role-btn tenant" type="submit">Continue as tenant</button>
+            </form>
+        {% else %}
+            <p>No landlords have registered yet. Please try again later.</p>
+        {% endif %}
+        <a href="{{ url_for('choose_role') }}">Back</a>
+    {% else %}
+        <h1>Welcome to BomaManager! 👋</h1>
+        <p>One last step: How will you use BomaManager?</p>
 
-    <a href="{{ url_for('set_role', role='landlord') }}" class="role-btn landlord">
-        🏠 I am a Landlord<br>
-        <small>Manage properties, tenants, and rent</small>
-    </a>
+        <a href="{{ url_for('set_role', role='landlord') }}" class="role-btn landlord">
+            🏠 I am a Landlord<br>
+            <small>Manage properties, tenants, and rent</small>
+        </a>
 
-    <a href="{{ url_for('set_role', role='tenant') }}" class="role-btn tenant">
-        🔑 I am a Tenant<br>
-        <small>Pay rent, view bills, contact landlord</small>
-    </a>
+        <a href="{{ url_for('set_role', role='tenant') }}" class="role-btn tenant">
+            🔑 I am a Tenant<br>
+            <small>Browse available rooms and request one</small>
+        </a>
+    {% endif %}
 </div>
 </body>
 </html>

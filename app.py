@@ -15,8 +15,8 @@ if os.getenv('FLASK_ENV', 'production').lower() == 'development':
 try:
     import requests
     from requests.auth import HTTPBasicAuth
-    from sqlalchemy import inspect
-    from sqlalchemy.exc import SQLAlchemyError
+    from sqlalchemy import inspect, or_
+    from sqlalchemy.exc import IntegrityError, SQLAlchemyError
     from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
     from flask_sqlalchemy import SQLAlchemy
     from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
@@ -226,6 +226,31 @@ class Room(db.Model):
     assigned_date = db.Column(db.Date, nullable=True)
     property = db.relationship('Property', backref='rooms')
     tenant = db.relationship('User', backref='room', foreign_keys=[tenant_id])
+
+class RoomRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
+    tenant_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='pending')
+    requested_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    room = db.relationship('Room', backref='requests')
+    tenant = db.relationship('User', backref='room_requests', foreign_keys=[tenant_id])
+    __table_args__ = (db.UniqueConstraint('room_id', 'tenant_id', name='unique_room_request_per_tenant'),)
+
+def reject_pending_room_requests(room_id=None, tenant_id=None, except_request_id=None):
+    filters = [RoomRequest.status == 'pending']
+    criteria = []
+    if room_id is not None:
+        criteria.append(RoomRequest.room_id == room_id)
+    if tenant_id is not None:
+        criteria.append(RoomRequest.tenant_id == tenant_id)
+    if not criteria:
+        return
+    filters.append(or_(*criteria))
+    if except_request_id is not None:
+        filters.append(RoomRequest.id != except_request_id)
+    for room_request in RoomRequest.query.filter(*filters).all():
+        room_request.status = 'rejected'
 
 class Payment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -972,14 +997,25 @@ def choose_role():
         return redirect(url_for('dashboard'))
     return render_template('choose_role.html')
 
-@app.route("/set_role/<role>")
+@app.route("/set_role/<role>", methods=['GET', 'POST'])
 @login_required
 def set_role(role):
     if role not in ['landlord', 'tenant']:
         flash('Invalid role')
         return redirect(url_for('choose_role'))
+    landlord = None
+    if role == 'tenant':
+        landlords = User.query.filter_by(role='landlord').order_by(User.email).all()
+        if request.method == 'GET':
+            return render_template('choose_role.html', choosing_tenant=True, landlords=landlords)
+        landlord_id = request.form.get('landlord_id')
+        landlord = User.query.filter_by(id=landlord_id, role='landlord').first() if landlord_id else None
+        if not landlord:
+            flash('Select a valid landlord to continue.')
+            return render_template('choose_role.html', choosing_tenant=True, landlords=landlords)
     current_user.role = role
     current_user.is_landlord = (role == 'landlord')
+    current_user.landlord_id = landlord.id if landlord else None
     db.session.commit()
     flash(f'Account setup complete! You are now a {role}.')
     return redirect(url_for('dashboard'))
@@ -994,6 +1030,10 @@ def dashboard():
     if current_user.role == 'landlord':
         properties = Property.query.filter_by(landlord_id=current_user.id).all()
         tenants = User.query.filter_by(role='tenant', landlord_id=current_user.id).all()
+        room_requests = RoomRequest.query.join(Room).join(Property).filter(
+            Property.landlord_id == current_user.id,
+            RoomRequest.status == 'pending',
+        ).order_by(RoomRequest.requested_at.asc()).all()
         current_period_by_room = {room.id: get_billing_period(room) for prop in properties for room in prop.rooms}
         period_keys = [period['key'] for period in current_period_by_room.values() if period]
         water_bills = {bill.room_id: bill for bill in WaterBill.query.filter(WaterBill.month.in_(period_keys)).all()} if period_keys else {}
@@ -1013,7 +1053,7 @@ def dashboard():
         occupied_rooms = sum(room.is_occupied for prop in properties for room in prop.rooms)
         subscription_deadline = current_user.subscription_deadline()
         subscription_countdown = get_countdown_parts(subscription_deadline)
-        return render_template('dashboard.html', properties=properties, tenants=tenants, room=None, payment_status=None, water_bills=water_bills, pending_bills_by_room=pending_bills_by_room, payments_by_room=payments_by_room, current_period_by_room=current_period_by_room, total_month_collection=total_month_collection, total_rooms=total_rooms, occupied_rooms=occupied_rooms, current_month_label=datetime.now().strftime('%B %Y'), subscription_deadline=subscription_deadline, subscription_countdown=subscription_countdown)
+        return render_template('dashboard.html', properties=properties, tenants=tenants, room_requests=room_requests, room=None, payment_status=None, water_bills=water_bills, pending_bills_by_room=pending_bills_by_room, payments_by_room=payments_by_room, current_period_by_room=current_period_by_room, total_month_collection=total_month_collection, total_rooms=total_rooms, occupied_rooms=occupied_rooms, current_month_label=datetime.now().strftime('%B %Y'), subscription_deadline=subscription_deadline, subscription_countdown=subscription_countdown)
     else:
         properties = None
         room = None
@@ -1040,7 +1080,151 @@ def dashboard():
             rent_due_target = current_period['due_at'] if current_period else None
             rent_due_countdown = get_countdown_parts(rent_due_target) if rent_due_target else None
     landlord = current_user.landlord if current_user.role == 'tenant' else None
-    return render_template('dashboard.html', properties=properties, room=room, payment_status=payment_status, water_bill=water_bill, total_amount=total_amount, total_paid=total_paid, balance=balance, paid=paid, current_period=current_period, landlord=landlord, rent_due_target=rent_due_target, rent_due_countdown=rent_due_countdown)
+    available_rooms = []
+    room_request_by_room = {}
+    room_request_counts = {}
+    my_room_requests = []
+    if landlord:
+        my_room_requests = RoomRequest.query.filter_by(tenant_id=current_user.id).order_by(
+            RoomRequest.requested_at.desc()
+        ).all()
+        if not room:
+            available_rooms = Room.query.join(Property).filter(
+                Property.landlord_id == landlord.id,
+                Room.is_occupied.is_(False),
+                Room.tenant_id.is_(None),
+            ).order_by(Property.name, Room.room_number).all()
+            room_request_by_room = {
+                room_request.room_id: room_request
+                for room_request in my_room_requests
+                if room_request.status == 'pending'
+            }
+            room_request_counts = dict(
+                db.session.query(RoomRequest.room_id, db.func.count(RoomRequest.id))
+                .join(Room)
+                .join(Property)
+                .filter(
+                    Property.landlord_id == landlord.id,
+                    RoomRequest.status == 'pending',
+                )
+                .group_by(RoomRequest.room_id)
+                .all()
+            )
+    return render_template(
+        'dashboard.html',
+        properties=properties,
+        room=room,
+        payment_status=payment_status,
+        water_bill=water_bill,
+        total_amount=total_amount,
+        total_paid=total_paid,
+        balance=balance,
+        paid=paid,
+        current_period=current_period,
+        landlord=landlord,
+        rent_due_target=rent_due_target,
+        rent_due_countdown=rent_due_countdown,
+        available_rooms=available_rooms,
+        room_request_by_room=room_request_by_room,
+        room_request_counts=room_request_counts,
+        my_room_requests=my_room_requests,
+    )
+
+@app.route('/rooms/<int:room_id>/request', methods=['POST'])
+@login_required
+def request_room(room_id):
+    if current_user.role != 'tenant':
+        return "Access Denied", 403
+    if current_user.room:
+        flash('You already have a room assigned.')
+        return redirect(url_for('dashboard'))
+    room = Room.query.join(Property).filter(
+        Room.id == room_id,
+        Property.landlord_id == current_user.landlord_id,
+        Room.is_occupied.is_(False),
+        Room.tenant_id.is_(None),
+    ).first()
+    if not room:
+        flash('That room is no longer available.')
+        return redirect(url_for('dashboard'))
+
+    room_request = RoomRequest.query.filter_by(room_id=room.id, tenant_id=current_user.id).first()
+    if room_request and room_request.status == 'pending':
+        flash('You already have a pending request for this room.')
+        return redirect(url_for('dashboard'))
+    if room_request:
+        room_request.status = 'pending'
+        room_request.requested_at = datetime.utcnow()
+    else:
+        room_request = RoomRequest(room_id=room.id, tenant_id=current_user.id)
+        db.session.add(room_request)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        existing_request = RoomRequest.query.filter_by(room_id=room.id, tenant_id=current_user.id).first()
+        if not existing_request or existing_request.status != 'pending':
+            raise
+        flash('You already have a pending request for this room.')
+        return redirect(url_for('dashboard'))
+    flash(f'Your request for Room {room.room_number} has been sent to the landlord.')
+    return redirect(url_for('dashboard'))
+
+@app.route('/room-requests/<int:request_id>/approve', methods=['POST'])
+@login_required
+@subscription_required
+def approve_room_request(request_id):
+    if current_user.role != 'landlord':
+        return "Access Denied", 403
+    room_request = RoomRequest.query.join(Room).join(Property).filter(
+        RoomRequest.id == request_id,
+        Property.landlord_id == current_user.id,
+    ).first_or_404()
+    if room_request.status != 'pending':
+        flash('This room request has already been handled.')
+        return redirect(url_for('dashboard'))
+    room = room_request.room
+    if room.is_occupied or room.tenant_id is not None:
+        reject_pending_room_requests(room_id=room.id)
+        db.session.commit()
+        flash('This room is no longer vacant. The pending requests were closed.')
+        return redirect(url_for('dashboard'))
+    if Room.query.filter_by(tenant_id=room_request.tenant_id).first():
+        reject_pending_room_requests(tenant_id=room_request.tenant_id)
+        db.session.commit()
+        flash('This tenant already has an assigned room. Their pending requests were closed.')
+        return redirect(url_for('dashboard'))
+
+    room.tenant_id = room_request.tenant_id
+    room.is_occupied = True
+    room.assigned_date = date.today()
+    room_request.status = 'approved'
+    reject_pending_room_requests(
+        room_id=room.id,
+        tenant_id=room_request.tenant_id,
+        except_request_id=room_request.id,
+    )
+    db.session.commit()
+    flash(f'Room {room.room_number} has been assigned to {room_request.tenant.name or room_request.tenant.email}.')
+    return redirect(url_for('dashboard'))
+
+@app.route('/room-requests/<int:request_id>/reject', methods=['POST'])
+@login_required
+@subscription_required
+def reject_room_request(request_id):
+    if current_user.role != 'landlord':
+        return "Access Denied", 403
+    room_request = RoomRequest.query.join(Room).join(Property).filter(
+        RoomRequest.id == request_id,
+        Property.landlord_id == current_user.id,
+    ).first_or_404()
+    if room_request.status != 'pending':
+        flash('This room request has already been handled.')
+    else:
+        room_request.status = 'rejected'
+        db.session.commit()
+        flash(f'Request for Room {room_request.room.room_number} rejected.')
+    return redirect(url_for('dashboard'))
 
 @app.route('/update_contact', methods=['GET', 'POST'])
 @login_required
@@ -1288,6 +1472,7 @@ def delete_property(prop_id):
         Payment.query.filter_by(room_id=room.id).delete()
         WaterBill.query.filter_by(room_id=room.id).delete()
         PendingBill.query.filter_by(room_id=room.id).delete()
+        RoomRequest.query.filter_by(room_id=room.id).delete()
         db.session.delete(room)
     db.session.delete(prop)
     db.session.commit()
@@ -1334,6 +1519,7 @@ def delete_room(room_id):
     Payment.query.filter_by(room_id=room.id).delete()
     WaterBill.query.filter_by(room_id=room.id).delete()
     PendingBill.query.filter_by(room_id=room.id).delete()
+    RoomRequest.query.filter_by(room_id=room.id).delete()
     db.session.delete(room)
     db.session.commit()
     flash('Room deleted!')
@@ -1446,14 +1632,29 @@ def assign_tenant(room_id):
     room = Room.query.get_or_404(room_id)
     if room.property.landlord_id != current_user.id:
         return "Access Denied"
+    if room.is_occupied or room.tenant_id is not None:
+        flash('This room is already occupied.')
+        return redirect(url_for('dashboard'))
     # Only show tenants linked to this landlord.
     tenants = User.query.filter_by(role='tenant', landlord_id=current_user.id).all()
     if request.method == 'POST':
-        tenant_id = request.form['tenant_id']
-        assigned_date = datetime.strptime(request.form['assigned_date'], '%Y-%m-%d').date()
-        room.tenant_id = tenant_id
+        tenant = User.query.filter_by(
+            id=request.form.get('tenant_id'),
+            role='tenant',
+            landlord_id=current_user.id,
+        ).first()
+        if not tenant:
+            flash('Select a tenant linked to your account.')
+            return render_template('assign_tenant.html', room=room, tenants=tenants, today=date.today().isoformat())
+        try:
+            assigned_date = datetime.strptime(request.form.get('assigned_date', ''), '%Y-%m-%d').date()
+        except (TypeError, ValueError):
+            flash('Enter a valid assignment date.')
+            return render_template('assign_tenant.html', room=room, tenants=tenants, today=date.today().isoformat())
+        room.tenant_id = tenant.id
         room.is_occupied = True
         room.assigned_date = assigned_date
+        reject_pending_room_requests(room_id=room.id, tenant_id=tenant.id)
         db.session.commit()
         flash('Tenant Assigned!')
         return redirect(url_for('dashboard'))
@@ -1492,9 +1693,17 @@ def vacate_room(room_id):
         Room.id == room_id,
         Property.landlord_id == current_user.id,
     ).first_or_404()
+    vacated_tenant_id = room.tenant_id
     room.tenant_id = None
     room.is_occupied = False
     room.assigned_date = None
+    approved_request = RoomRequest.query.filter_by(
+        room_id=room.id,
+        tenant_id=vacated_tenant_id,
+        status='approved',
+    ).first()
+    if approved_request:
+        approved_request.status = 'cancelled'
     db.session.commit()
     flash('Room has been vacated!')
     return redirect(url_for('dashboard'))

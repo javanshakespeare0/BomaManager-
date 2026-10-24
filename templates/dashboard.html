@@ -96,6 +96,38 @@
             </div>
         </section>
 
+        <section class="property-card">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Room applications</p>
+                    <h2>Pending room requests</h2>
+                </div>
+                <span class="count-badge">{{ room_requests|length }} pending</span>
+            </div>
+            {% if room_requests %}
+                {% for room_request in room_requests %}
+                    <div class="tenant-row">
+                        <div>
+                            <strong>{{ room_request.tenant.name or room_request.tenant.email }} · Room {{ room_request.room.room_number }}</strong>
+                            <span>{{ room_request.room.property.name }} · Ksh {{ room_request.room.rent_amount }} per month</span>
+                            <span>{{ room_request.tenant.email }} · {{ room_request.tenant.contact_number or 'No contact number' }}</span>
+                            <span>{{ room_request.room.requests|selectattr('status', 'equalto', 'pending')|list|length }} pending applicant(s) for this room</span>
+                        </div>
+                        <div class="section-actions">
+                            <form method="POST" action="{{ url_for('approve_room_request', request_id=room_request.id) }}">
+                                <button class="btn primary-action" type="submit">Approve &amp; assign</button>
+                            </form>
+                            <form method="POST" action="{{ url_for('reject_room_request', request_id=room_request.id) }}">
+                                <button class="btn btn-danger" type="submit">Reject</button>
+                            </form>
+                        </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p class="empty-state">No room requests are waiting for your review.</p>
+            {% endif %}
+        </section>
+
         <div class="property-card destination-card">
             <div class="destination-heading">
                 <div>
@@ -300,6 +332,58 @@
                 <h3>Contact your landlord</h3>
                 <p>{{ landlord.name or landlord.email }}</p>
                 <p><b>{{ landlord.contact_number or 'No contact number provided yet' }}</b></p>
+            </div>
+        {% endif %}
+        {% if not room and landlord %}
+            <section class="property-card">
+                <div class="section-heading">
+                    <div>
+                        <p class="eyebrow">Choose your accommodation</p>
+                        <h2>Available rooms</h2>
+                        <p class="muted">Request a vacant room from {{ landlord.name or landlord.email }}. The landlord must approve it before it is assigned.</p>
+                    </div>
+                </div>
+                {% if available_rooms %}
+                    {% for available_room in available_rooms %}
+                        {% set existing_request = room_request_by_room.get(available_room.id) %}
+                        <div class="tenant-row">
+                            <div>
+                                <strong>{{ available_room.property.name }} · Room {{ available_room.room_number }}</strong>
+                                <span>{{ available_room.property.location }} · Ksh {{ available_room.rent_amount }} per month</span>
+                                <span>{{ room_request_counts.get(available_room.id, 0) }} {{ 'person has' if room_request_counts.get(available_room.id, 0) == 1 else 'people have' }} requested this room</span>
+                                {% if existing_request %}
+                                    <span>Request sent {{ existing_request.requested_at.strftime('%d %b %Y at %H:%M') }} · Waiting for landlord approval</span>
+                                {% endif %}
+                            </div>
+                            {% if existing_request %}
+                                <span class="count-badge">Request pending</span>
+                            {% else %}
+                                <form method="POST" action="{{ url_for('request_room', room_id=available_room.id) }}">
+                                    <button class="btn primary-action" type="submit">Request this room</button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="empty-state">There are no vacant rooms available from this landlord right now.</p>
+                {% endif %}
+
+                {% if my_room_requests %}
+                    <h3>My room requests</h3>
+                    {% for room_request in my_room_requests %}
+                        <div class="tenant-row">
+                            <div>
+                                <strong>{{ room_request.room.property.name }} · Room {{ room_request.room.room_number }}</strong>
+                                <span>Requested {{ room_request.requested_at.strftime('%d %b %Y at %H:%M') }}</span>
+                            </div>
+                            <span class="count-badge">{{ room_request.status|title }}</span>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            </section>
+        {% elif not landlord and not room %}
+            <div class="property-card">
+                <p>Choose a landlord to see their available rooms. Contact support if you need to change your landlord.</p>
             </div>
         {% endif %}
         {% if room %}
