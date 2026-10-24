@@ -13,6 +13,8 @@ from maintenance import is_maintenance_on, set_maintenance
 if os.getenv('FLASK_ENV', 'production').lower() == 'development':
     os.environ.setdefault('OAUTHLIB_INSECURE_TRANSPORT', '1')
 try:
+    import africastalking
+    from africastalking.Service import AfricasTalkingException
     import requests
     from requests.auth import HTTPBasicAuth
     from sqlalchemy import inspect, or_
@@ -568,32 +570,46 @@ def registration_challenge_matches(challenge, email, phone):
 
 
 def send_registration_sms(phone, code):
-    username = os.getenv('AFRICASTALKING_USERNAME', '').strip()
-    api_key = os.getenv('AFRICASTALKING_API_KEY', '').strip()
+    username = (
+        os.getenv('AT_USERNAME', '').strip()
+        or os.getenv('AFRICASTALKING_USERNAME', '').strip()
+    )
+    api_key = (
+        os.getenv('AT_API_KEY', '').strip()
+        or os.getenv('AFRICASTALKING_API_KEY', '').strip()
+    )
     if not username or not api_key:
         app.logger.error('Phone verification is unavailable because Africa\'s Talking credentials are not configured.')
         return False
 
-    payload = {
-        'username': username,
-        'to': phone,
-        'message': f'Your BomaManager verification code is {code}. It expires in 10 minutes.',
-    }
     sender_id = os.getenv('AFRICASTALKING_SENDER_ID', '').strip()
-    if sender_id:
-        payload['from'] = sender_id
 
     try:
-        response = requests.post(
-            'https://api.africastalking.com/version1/messaging',
-            data=payload,
-            headers={'apiKey': api_key, 'Accept': 'application/json'},
+        africastalking.initialize(username, api_key)
+        sms_response = africastalking.SMS.send(
+            f'Your BomaManager verification code is {code}. It expires in 10 minutes.',
+            [phone],
+            sender_id=sender_id or None,
             timeout=12,
         )
-        response.raise_for_status()
-        recipients = response.json().get('SMSMessageData', {}).get('Recipients', [])
-        return bool(recipients) and str(recipients[0].get('statusCode')) in {'100', '101', '102'}
-    except (requests.RequestException, ValueError, AttributeError):
+        sms_data = sms_response.get('SMSMessageData', {})
+        recipients = sms_data.get('Recipients', [])
+        if recipients and str(recipients[0].get('statusCode')) in {'100', '101', '102'}:
+            return True
+        recipient_statuses = [
+            {
+                'statusCode': recipient.get('statusCode'),
+                'status': recipient.get('status'),
+            }
+            for recipient in recipients
+        ]
+        app.logger.warning(
+            'Africa\'s Talking rejected a registration SMS: provider_message=%r recipient_statuses=%s',
+            sms_data.get('Message'),
+            recipient_statuses,
+        )
+        return False
+    except (AfricasTalkingException, requests.RequestException, ValueError, TypeError, AttributeError):
         app.logger.exception('Africa\'s Talking could not send a registration verification SMS.')
         return False
 

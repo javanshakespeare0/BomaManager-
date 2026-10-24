@@ -74,7 +74,7 @@
                     <select name="landlord_id" id="landlord_id" style="width: 100%; padding: 10px; margin-bottom: 15px;">
                         <option value="">-- Select Your Landlord --</option>
                         {% for landlord in landlords %}
-                            <option value="{{ landlord.id }}"{% if form_values.get('landlord_id')|string == landlord.id|string %} selected{% endif %}>{{ landlord.email }}</option>
+                            <option value="{{ landlord.id }}"{% if form_values.get('landlord_id')|string == landlord.id|string %} selected{% endif %}>{{ landlord.name or landlord.email }} · {{ landlord.contact_number or 'No phone number' }} · {{ landlord.email }}</option>
                         {% endfor %}
                     </select>
                 </div>

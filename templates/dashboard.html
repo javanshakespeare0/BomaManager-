@@ -349,18 +349,21 @@
                         <div class="tenant-row">
                             <div>
                                 <strong>{{ available_room.property.name }} · Room {{ available_room.room_number }}</strong>
-                                <span>{{ available_room.property.location }} · Ksh {{ available_room.rent_amount }} per month</span>
+                                <span>{{ available_room.property.location }}{% if available_room.room_type %} · {{ available_room.room_type }}{% endif %} · Ksh {{ available_room.rent_amount }} per month</span>
                                 <span>{{ room_request_counts.get(available_room.id, 0) }} {{ 'person has' if room_request_counts.get(available_room.id, 0) == 1 else 'people have' }} requested this room</span>
                                 {% if existing_request %}
                                     <span>Request sent {{ existing_request.requested_at.strftime('%d %b %Y at %H:%M') }} · Waiting for landlord approval</span>
                                 {% endif %}
                             </div>
                             {% if existing_request %}
-                                <span class="count-badge">Request pending</span>
+                                <span class="count-badge">Vacant · Request pending</span>
                             {% else %}
-                                <form method="POST" action="{{ url_for('request_room', room_id=available_room.id) }}">
-                                    <button class="btn primary-action" type="submit">Request this room</button>
-                                </form>
+                                <div class="section-actions">
+                                    <span class="count-badge">Vacant</span>
+                                    <form method="POST" action="{{ url_for('request_room', room_id=available_room.id) }}">
+                                        <button class="btn primary-action" type="submit">Request this room</button>
+                                    </form>
+                                </div>
                             {% endif %}
                         </div>
                     {% endfor %}
