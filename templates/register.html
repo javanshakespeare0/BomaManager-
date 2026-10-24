@@ -48,7 +48,7 @@
           {% endif %}
         {% endwith %}
 
-        <p class="helper-text">Verify your phone to finish creating your account. We’ll save the verified number to your profile.</p>
+        <p class="helper-text">{% if google_registration %}Set a password, choose your account type, and add your phone number to finish creating your account.{% else %}Verify your phone to finish creating your account. We’ll save the verified number to your profile.{% endif %}</p>
         <form method="POST" id="registration-form" data-send-code-url="{{ url_for('send_registration_code') }}" data-google-registration="{{ 'true' if google_registration else 'false' }}" data-code-sent-to-phone="{{ form_values.get('contact_number', '') if verification_sent else '' }}">
             {% if google_registration %}
                 <label for="name">Name</label>
@@ -58,43 +58,50 @@
             {% else %}
                 <input type="text" name="name" placeholder="User name" value="{{ form_values.get('name', '') }}" required maxlength="100" autocomplete="name" style="width: 100%; padding: 10px; margin-bottom: 10px;">
                 <input type="email" name="email" placeholder="Email" value="{{ form_values.get('email', '') }}" required autocomplete="email" style="width: 100%; padding: 10px; margin-bottom: 10px;">
-                <input type="password" name="password" id="password" placeholder="Password" required autocomplete="new-password" style="width: 100%; padding: 10px; margin-bottom: 6px;">
-                <div class="password-meter" aria-live="polite">
-                    <div id="password-strength-bar" class="password-strength-bar"></div>
-                </div>
-                <small id="password-strength-text" class="password-strength-text">Password strength:—</small>
-                <label for="confirm-password">Confirm password</label>
-                <input type="password" name="confirm_password" id="confirm-password" placeholder="Re-enter password" required autocomplete="new-password" style="width: 100%; padding: 10px; margin-top: 8px; margin-bottom: 10px;">
-                <select name="role" id="registration-role" required style="width: 100%; padding: 10px; margin-top: 12px; margin-bottom: 15px;">
-                    <option value="">-- Select Role --</option>
-                    <option value="landlord"{% if form_values.get('role') == 'landlord' %} selected{% endif %}>Landlord</option>
-                    <option value="tenant"{% if form_values.get('role') == 'tenant' %} selected{% endif %}>Tenant</option>
-                </select>
-                <div id="landlord-field" {% if form_values.get('role') != 'tenant' %}hidden{% endif %}>
-                    <select name="landlord_id" id="landlord_id" style="width: 100%; padding: 10px; margin-bottom: 15px;">
-                        <option value="">-- Select Your Landlord --</option>
-                        {% for landlord in landlords %}
-                            <option value="{{ landlord.id }}"{% if form_values.get('landlord_id')|string == landlord.id|string %} selected{% endif %}>{{ landlord.name or landlord.email }} · {{ landlord.contact_number or 'No phone number' }} · {{ landlord.email }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
             {% endif %}
 
+            <label for="password">Password</label>
+            <input type="password" name="password" id="password" placeholder="Password" required {% if google_registration %}minlength="6"{% endif %} autocomplete="new-password" style="width: 100%; padding: 10px; margin-bottom: 6px;">
+            <div class="password-meter" aria-live="polite">
+                <div id="password-strength-bar" class="password-strength-bar"></div>
+            </div>
+            <small id="password-strength-text" class="password-strength-text">Password strength:—</small>
+            <label for="confirm-password">Confirm password</label>
+            <input type="password" name="confirm_password" id="confirm-password" placeholder="Re-enter password" required autocomplete="new-password" style="width: 100%; padding: 10px; margin-top: 8px; margin-bottom: 10px;">
+            <label for="registration-role">Account type</label>
+            <select name="role" id="registration-role" required style="width: 100%; padding: 10px; margin-top: 12px; margin-bottom: 15px;">
+                <option value="">-- Select Role --</option>
+                <option value="landlord"{% if form_values.get('role') == 'landlord' %} selected{% endif %}>Landlord</option>
+                <option value="tenant"{% if form_values.get('role') == 'tenant' %} selected{% endif %}>Tenant</option>
+            </select>
+            <div id="landlord-field" {% if form_values.get('role') != 'tenant' %}hidden{% endif %}>
+                <label for="landlord_id">Choose your landlord</label>
+                <select name="landlord_id" id="landlord_id" style="width: 100%; padding: 10px; margin-bottom: 15px;">
+                    <option value="">-- Select Your Landlord --</option>
+                    {% for landlord in landlords %}
+                        <option value="{{ landlord.id }}"{% if form_values.get('landlord_id')|string == landlord.id|string %} selected{% endif %}>{{ landlord.name or landlord.email }} · {{ landlord.contact_number or 'No phone number' }} · {{ landlord.email }}</option>
+                    {% endfor %}
+                </select>
+            </div>
             <label for="contact_number">Mobile phone number</label>
             <input type="tel" name="contact_number" id="contact_number" value="{{ form_values.get('contact_number', '') }}" placeholder="+254 7XX XXX XXX" autocomplete="tel" inputmode="tel" required maxlength="30">
             <small class="helper-text">Kenyan numbers like 07… or 01… are accepted. International numbers should include + and the country code.</small>
 
-            <div id="verification-fields" {% if not verification_sent %}hidden{% endif %}>
-                <label for="verification_code">Verification code</label>
-                <input type="text" name="verification_code" id="verification_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="6-digit code" {% if verification_sent %}required{% endif %}>
-            </div>
-            <p id="verification-message" class="helper-text" role="status" aria-live="polite">{% if verification_sent %}Enter the code we sent to your phone.{% endif %}</p>
-            <button type="button" id="send-verification-code" style="width: 100%; padding: 12px; background: #26796d; color: white; border: none; border-radius: 5px;">
-                {{ 'Resend verification code' if verification_sent else 'Send verification code' }}
-            </button>
-            <button type="submit" id="complete-registration" {% if not verification_sent %}hidden{% endif %} style="width: 100%; padding: 12px; margin-top: 10px; background: #28a745; color: white; border: none; border-radius: 5px;">
-                Verify code and create account
-            </button>
+            {% if google_registration %}
+                <button type="submit" style="width: 100%; padding: 12px; margin-top: 10px; background: #28a745; color: white; border: none; border-radius: 5px;">Create account</button>
+            {% else %}
+                <div id="verification-fields" {% if not verification_sent %}hidden{% endif %}>
+                    <label for="verification_code">Verification code</label>
+                    <input type="text" name="verification_code" id="verification_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="6-digit code" {% if verification_sent %}required{% endif %}>
+                </div>
+                <p id="verification-message" class="helper-text" role="status" aria-live="polite">{% if verification_sent %}Enter the code we sent to your phone.{% endif %}</p>
+                <button type="button" id="send-verification-code" style="width: 100%; padding: 12px; background: #26796d; color: white; border: none; border-radius: 5px;">
+                    {{ 'Resend verification code' if verification_sent else 'Send verification code' }}
+                </button>
+                <button type="submit" id="complete-registration" {% if not verification_sent %}hidden{% endif %} style="width: 100%; padding: 12px; margin-top: 10px; background: #28a745; color: white; border: none; border-radius: 5px;">
+                    Verify code and create account
+                </button>
+            {% endif %}
         </form>
 
         {% if not google_registration %}
@@ -125,6 +132,7 @@
     const sendCodeButton = document.getElementById('send-verification-code');
     const completeButton = document.getElementById('complete-registration');
     const verificationMessage = document.getElementById('verification-message');
+    const isGoogleRegistration = registrationForm.dataset.googleRegistration === 'true';
     let codeSentToPhone = registrationForm.dataset.codeSentToPhone || '';
 
     function updateLandlordField() {
@@ -172,74 +180,77 @@
         validatePasswordConfirmation();
     });
     if (confirmPasswordInput) confirmPasswordInput.addEventListener('input', validatePasswordConfirmation);
-    phoneInput.addEventListener('input', function () {
-        if (phoneInput.value.trim() !== codeSentToPhone) {
-            codeSentToPhone = '';
-            codeInput.value = '';
-            codeInput.required = false;
-            codeFields.hidden = true;
-            completeButton.hidden = true;
-            sendCodeButton.hidden = false;
-            verificationMessage.textContent = 'Phone number changed. Send a new code to verify it.';
-        }
-    });
-    sendCodeButton.addEventListener('click', async function () {
-        const nameInput = registrationForm.elements.namedItem('name');
-        const emailInput = registrationForm.elements.namedItem('email');
-        const roleInput = registrationForm.elements.namedItem('role');
-        const landlordInput = registrationForm.elements.namedItem('landlord_id');
-        const payload = {
-            name: nameInput ? nameInput.value : '',
-            email: emailInput ? emailInput.value : '',
-            role: roleInput ? roleInput.value : '',
-            landlord_id: landlordInput ? landlordInput.value : '',
-            contact_number: phoneInput.value,
-            has_password: passwordInput ? Boolean(passwordInput.value) : true
-        };
-        const fieldsToValidate = [nameInput, emailInput, phoneInput, passwordInput];
-        if (confirmPasswordInput) fieldsToValidate.push(confirmPasswordInput);
-        if (roleInput) fieldsToValidate.push(roleInput);
-        if (roleInput && roleInput.value === 'tenant') fieldsToValidate.push(landlordInput);
-        validatePasswordConfirmation();
-        for (const field of fieldsToValidate) {
-            if (field && !field.reportValidity()) return;
-        }
-        sendCodeButton.disabled = true;
-        verificationMessage.textContent = 'Sending verification code…';
-        try {
-            const response = await fetch(registrationForm.dataset.sendCodeUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const result = await response.json();
-            if (!response.ok) throw new Error(result.error || 'Could not send a verification code.');
-            codeSentToPhone = phoneInput.value.trim();
-            codeFields.hidden = false;
-            codeInput.required = true;
-            completeButton.hidden = false;
-            sendCodeButton.textContent = 'Resend verification code';
-            verificationMessage.textContent = result.message;
-            codeInput.focus();
-        } catch (error) {
-            verificationMessage.textContent = error.message;
-        } finally {
-            sendCodeButton.disabled = false;
-        }
-    });
+    if (sendCodeButton) {
+        phoneInput.addEventListener('input', function () {
+            if (phoneInput.value.trim() !== codeSentToPhone) {
+                codeSentToPhone = '';
+                codeInput.value = '';
+                codeInput.required = false;
+                codeFields.hidden = true;
+                completeButton.hidden = true;
+                sendCodeButton.hidden = false;
+                verificationMessage.textContent = 'Phone number changed. Send a new code to verify it.';
+            }
+        });
+        sendCodeButton.addEventListener('click', async function () {
+            const nameInput = registrationForm.elements.namedItem('name');
+            const emailInput = registrationForm.elements.namedItem('email');
+            const roleInput = registrationForm.elements.namedItem('role');
+            const landlordInput = registrationForm.elements.namedItem('landlord_id');
+            const payload = {
+                name: nameInput ? nameInput.value : '',
+                email: emailInput ? emailInput.value : '',
+                role: roleInput ? roleInput.value : '',
+                landlord_id: landlordInput ? landlordInput.value : '',
+                contact_number: phoneInput.value,
+                has_password: passwordInput ? Boolean(passwordInput.value) : true
+            };
+            const fieldsToValidate = [nameInput, emailInput, phoneInput, passwordInput];
+            if (confirmPasswordInput) fieldsToValidate.push(confirmPasswordInput);
+            if (roleInput) fieldsToValidate.push(roleInput);
+            if (roleInput && roleInput.value === 'tenant') fieldsToValidate.push(landlordInput);
+            validatePasswordConfirmation();
+            for (const field of fieldsToValidate) {
+                if (field && !field.reportValidity()) return;
+            }
+            sendCodeButton.disabled = true;
+            verificationMessage.textContent = 'Sending verification code…';
+            try {
+                const response = await fetch(registrationForm.dataset.sendCodeUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.error || 'Could not send a verification code.');
+                codeSentToPhone = phoneInput.value.trim();
+                codeFields.hidden = false;
+                codeInput.required = true;
+                completeButton.hidden = false;
+                sendCodeButton.textContent = 'Resend verification code';
+                verificationMessage.textContent = result.message;
+                codeInput.focus();
+            } catch (error) {
+                verificationMessage.textContent = error.message;
+            } finally {
+                sendCodeButton.disabled = false;
+            }
+        });
+    }
     registrationForm.addEventListener('submit', function (event) {
         validatePasswordConfirmation();
         if (!registrationForm.reportValidity()) {
             event.preventDefault();
             return;
         }
-        if (!codeSentToPhone || phoneInput.value.trim() !== codeSentToPhone) {
+        if (!isGoogleRegistration && (!codeSentToPhone || phoneInput.value.trim() !== codeSentToPhone)) {
             event.preventDefault();
             verificationMessage.textContent = 'Send a verification code to your current phone number first.';
             return;
         }
-        completeButton.disabled = true;
-        completeButton.textContent = 'Verifying…';
+        const submitButton = isGoogleRegistration ? registrationForm.querySelector('button[type="submit"]') : completeButton;
+        submitButton.disabled = true;
+        submitButton.textContent = isGoogleRegistration ? 'Creating account…' : 'Verifying…';
     });
     updateLandlordField();
     updatePasswordMeter();

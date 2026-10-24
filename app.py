@@ -671,9 +671,9 @@ def register():
         if google_registration:
             name = google_registration['name']
             email = google_registration['email'].strip().lower()
-            password = secrets.token_urlsafe(32)
-            role = 'pending'
-            landlord_id = None
+            password = request.form.get('password', '')
+            role = request.form.get('role', '')
+            landlord_id = request.form.get('landlord_id') if role == 'tenant' else None
         else:
             name = request.form.get('name', '').strip()
             email = request.form.get('email', '').strip().lower()
@@ -693,63 +693,73 @@ def register():
             'landlord_id': landlord_id or '',
         }
 
-        if not name or (not google_registration and (not email or not password or role not in {'landlord', 'tenant'})):
+        if not name or not email or not password or role not in {'landlord', 'tenant'}:
             flash('Complete all required account details.')
             return render_template(
                 'register.html', landlords=landlords, google_registration=bool(google_registration),
-                form_values=form_values, verification_sent=registration_challenge_matches(challenge, email, contact_number),
+                form_values=form_values,
+                verification_sent=not google_registration and registration_challenge_matches(challenge, email, contact_number),
             )
-        if not google_registration and password != request.form.get('confirm_password', ''):
+        if google_registration and len(password) < 6:
+            flash('Password must be at least 6 characters long.')
+            return render_template(
+                'register.html', landlords=landlords, google_registration=True,
+                form_values=form_values, verification_sent=False,
+            )
+        if password != request.form.get('confirm_password', ''):
             flash('Passwords do not match.')
             return render_template(
-                'register.html', landlords=landlords, google_registration=False,
-                form_values=form_values, verification_sent=registration_challenge_matches(challenge, email, contact_number),
+                'register.html', landlords=landlords, google_registration=bool(google_registration),
+                form_values=form_values,
+                verification_sent=not google_registration and registration_challenge_matches(challenge, email, contact_number),
             )
         if not contact_number:
             flash('Enter a valid phone number, including the country code if outside Kenya.')
             return render_template(
                 'register.html', landlords=landlords, google_registration=bool(google_registration),
-                form_values=form_values, verification_sent=registration_challenge_matches(challenge, email, contact_number),
+                form_values=form_values,
+                verification_sent=not google_registration and registration_challenge_matches(challenge, email, contact_number),
             )
-        if not google_registration and role == 'tenant':
+        if role == 'tenant':
             landlord = User.query.filter_by(id=landlord_id, role='landlord').first() if landlord_id else None
             if not landlord:
                 flash('Select a valid landlord.')
                 return render_template(
-                    'register.html', landlords=landlords, form_values=form_values,
-                    verification_sent=registration_challenge_matches(challenge, email, contact_number),
+                    'register.html', landlords=landlords, google_registration=bool(google_registration),
+                    form_values=form_values,
+                    verification_sent=not google_registration and registration_challenge_matches(challenge, email, contact_number),
                 )
         if User.query.filter_by(email=email).first():
             flash('Email already exists.')
             return render_template(
                 'register.html', landlords=landlords, google_registration=bool(google_registration),
-                form_values=form_values, verification_sent=registration_challenge_matches(challenge, email, contact_number),
+                form_values=form_values,
+                verification_sent=not google_registration and registration_challenge_matches(challenge, email, contact_number),
             )
 
-        code = request.form.get('verification_code', '').strip()
-        if (
-            not registration_challenge_matches(challenge, email, contact_number)
-            or not code
-        ):
-            flash('Verify your phone number with the code we sent before creating your account.')
-            return render_template(
-                'register.html', landlords=landlords, google_registration=bool(google_registration),
-                form_values=form_values, verification_sent=registration_challenge_matches(challenge, email, contact_number),
-            )
-        if not hmac.compare_digest(challenge.code_digest, registration_code_digest(contact_number, code)):
-            challenge.attempts += 1
-            if challenge.attempts >= 5:
-                challenge.consumed_at = datetime.utcnow()
-                verification_sent = False
-                flash('Too many incorrect codes. Request a new verification code.')
-            else:
-                verification_sent = True
-                flash('That verification code is incorrect.')
-            db.session.commit()
-            return render_template(
-                'register.html', landlords=landlords, google_registration=bool(google_registration),
-                form_values=form_values, verification_sent=verification_sent,
-            )
+        if not google_registration:
+            code = request.form.get('verification_code', '').strip()
+            if not registration_challenge_matches(challenge, email, contact_number) or not code:
+                flash('Verify your phone number with the code we sent before creating your account.')
+                return render_template(
+                    'register.html', landlords=landlords, google_registration=False,
+                    form_values=form_values,
+                    verification_sent=registration_challenge_matches(challenge, email, contact_number),
+                )
+            if not hmac.compare_digest(challenge.code_digest, registration_code_digest(contact_number, code)):
+                challenge.attempts += 1
+                if challenge.attempts >= 5:
+                    challenge.consumed_at = datetime.utcnow()
+                    verification_sent = False
+                    flash('Too many incorrect codes. Request a new verification code.')
+                else:
+                    verification_sent = True
+                    flash('That verification code is incorrect.')
+                db.session.commit()
+                return render_template(
+                    'register.html', landlords=landlords, google_registration=False,
+                    form_values=form_values, verification_sent=verification_sent,
+                )
 
         hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
         user = User(
@@ -762,15 +772,14 @@ def register():
             contact_number=contact_number,
         )
         db.session.add(user)
-        challenge.consumed_at = datetime.utcnow()
+        if not google_registration:
+            challenge.consumed_at = datetime.utcnow()
         db.session.commit()
         session.pop('registration_phone_challenge_id', None)
         session.pop('pending_google_registration', None)
         session.pop('registration_draft', None)
         login_user(user)
         flash('Account created successfully!')
-        if google_registration:
-            return redirect(url_for('choose_role'))
         return redirect(url_for('dashboard'))
     challenge = RegistrationPhoneChallenge.query.filter_by(
         challenge_id=session.get('registration_phone_challenge_id')
@@ -781,7 +790,7 @@ def register():
         landlords=landlords,
         google_registration=bool(google_registration),
         form_values=form_values,
-        verification_sent=registration_challenge_matches(
+        verification_sent=not google_registration and registration_challenge_matches(
             challenge, form_values.get('email', ''), form_values.get('contact_number', '')
         ),
     )
@@ -798,18 +807,17 @@ def send_otp():
 
     google_registration = session.get('pending_google_registration')
     if google_registration:
-        email = google_registration['email'].strip().lower()
-        role = 'google'
-    else:
-        email = str(data.get('email', '')).strip().lower()
-        name = str(data.get('name', '')).strip()
-        role = str(data.get('role', ''))
-        if not name or not email or role not in {'landlord', 'tenant'}:
-            return jsonify(error='Complete your name, email and account type first.'), 400
-        if role == 'tenant':
-            landlord_id = data.get('landlord_id')
-            if not landlord_id or not User.query.filter_by(id=landlord_id, role='landlord').first():
-                return jsonify(error='Select a valid landlord first.'), 400
+        return jsonify(error='Google registrations do not require phone verification.'), 400
+
+    email = str(data.get('email', '')).strip().lower()
+    name = str(data.get('name', '')).strip()
+    role = str(data.get('role', ''))
+    if not name or not email or role not in {'landlord', 'tenant'}:
+        return jsonify(error='Complete your name, email and account type first.'), 400
+    if role == 'tenant':
+        landlord_id = data.get('landlord_id')
+        if not landlord_id or not User.query.filter_by(id=landlord_id, role='landlord').first():
+            return jsonify(error='Select a valid landlord first.'), 400
 
     if User.query.filter_by(email=email).first():
         return jsonify(error='An account already exists for this email.'), 409
