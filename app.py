@@ -1,7 +1,5 @@
 import sys
 import calendar
-import hashlib
-import hmac
 import os
 import re
 import secrets
@@ -12,8 +10,6 @@ from maintenance import is_maintenance_on, set_maintenance
 if (os.getenv('APP_ENV') or os.getenv('FLASK_ENV') or 'development').lower() == 'development':
     os.environ.setdefault('OAUTHLIB_INSECURE_TRANSPORT', '1')
 try:
-    import africastalking
-    from africastalking.Service import AfricasTalkingException
     import requests
     from sqlalchemy import inspect, or_
     from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -106,7 +102,6 @@ def check_subscription_global():
         'home',
         'login',
         'register',
-        'send_registration_code',
         'google_login',
         'choose_role',
         'set_role',
@@ -128,7 +123,7 @@ def enforce_maintenance_mode():
     if request.path.startswith('/admin'):
         return None
     if request.endpoint in {
-        'login', 'logout', 'register', 'send_registration_code', 'google_login', 'static',
+        'login', 'logout', 'register', 'google_login', 'static',
         'mpesa_callback', 'subscription_callback',
     }:
         return None
@@ -305,17 +300,6 @@ class AuditLog(db.Model):
     action = db.Column(db.String(80), nullable=False)
     target_email = db.Column(db.String(150), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
-
-class RegistrationPhoneChallenge(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    challenge_id = db.Column(db.String(64), unique=True, nullable=False, index=True)
-    email = db.Column(db.String(150), nullable=False)
-    phone = db.Column(db.String(30), nullable=False)
-    code_digest = db.Column(db.String(64), nullable=False)
-    sent_at = db.Column(db.DateTime, nullable=False)
-    expires_at = db.Column(db.DateTime, nullable=False)
-    attempts = db.Column(db.Integer, nullable=False, default=0)
-    consumed_at = db.Column(db.DateTime, nullable=True)
 
 class SubscriptionPaymentAttempt(db.Model):
     checkout_request_id = db.Column(db.String(100), primary_key=True)
@@ -520,77 +504,6 @@ def format_kenyan_phone(phone):
     return normalized[1:] if normalized else None
 
 
-def normalize_registration_phone(value):
-    phone = normalize_kenyan_phone(value)
-    if not phone:
-        return None
-    if not re.fullmatch(r'\+[1-9]\d{7,14}', phone):
-        return None
-    return phone
-
-
-def registration_code_digest(phone, code):
-    secret = app.config['SECRET_KEY'].encode('utf-8')
-    return hmac.new(secret, f'{phone}:{code}'.encode('utf-8'), hashlib.sha256).hexdigest()
-
-
-def registration_challenge_matches(challenge, email, phone):
-    normalized_phone = normalize_registration_phone(phone)
-    return bool(
-        challenge
-        and challenge.email == (email or '').strip().lower()
-        and challenge.phone == normalized_phone
-        and challenge.consumed_at is None
-        and challenge.attempts < 5
-        and challenge.expires_at > datetime.utcnow()
-    )
-
-
-def send_registration_sms(phone, code):
-    username = (
-        os.getenv('AT_USERNAME', '').strip()
-        or os.getenv('AFRICASTALKING_USERNAME', '').strip()
-    )
-    api_key = (
-        os.getenv('AT_API_KEY', '').strip()
-        or os.getenv('AFRICASTALKING_API_KEY', '').strip()
-    )
-    if not username or not api_key:
-        app.logger.error('Phone verification is unavailable because Africa\'s Talking credentials are not configured.')
-        return False
-
-    sender_id = os.getenv('AFRICASTALKING_SENDER_ID', '').strip()
-
-    try:
-        africastalking.initialize(username, api_key)
-        sms_response = africastalking.SMS.send(
-            f'Your BomaManager verification code is {code}. It expires in 10 minutes.',
-            [phone],
-            sender_id=sender_id or None,
-            timeout=12,
-        )
-        sms_data = sms_response.get('SMSMessageData', {})
-        recipients = sms_data.get('Recipients', [])
-        if recipients and str(recipients[0].get('statusCode')) in {'100', '101', '102'}:
-            return True
-        recipient_statuses = [
-            {
-                'statusCode': recipient.get('statusCode'),
-                'status': recipient.get('status'),
-            }
-            for recipient in recipients
-        ]
-        app.logger.warning(
-            'Africa\'s Talking rejected a registration SMS: provider_message=%r recipient_statuses=%s',
-            sms_data.get('Message'),
-            recipient_statuses,
-        )
-        return False
-    except (AfricasTalkingException, requests.RequestException, ValueError, TypeError, AttributeError):
-        app.logger.exception('Africa\'s Talking could not send a registration verification SMS.')
-        return False
-
-
 # ==================== AUTH ROUTES ====================
 @app.route('/admin/toggle-maintenance', methods=['POST'])
 def toggle_maintenance():
@@ -650,14 +563,9 @@ def register():
             role = request.form.get('role', '')
             landlord_id = request.form.get('landlord_id') if role == 'tenant' else None
 
-        contact_number = normalize_registration_phone(request.form.get('contact_number', ''))
-        challenge = RegistrationPhoneChallenge.query.filter_by(
-            challenge_id=session.get('registration_phone_challenge_id')
-        ).first()
         form_values = {
             'name': name,
             'email': email,
-            'contact_number': request.form.get('contact_number', '').strip(),
             'role': role,
             'landlord_id': landlord_id or '',
         }
@@ -667,21 +575,12 @@ def register():
             return render_template(
                 'register.html', landlords=landlords, google_registration=bool(google_registration),
                 form_values=form_values,
-                verification_sent=not google_registration and registration_challenge_matches(challenge, email, contact_number),
             )
         if not google_registration and password != request.form.get('confirm_password', ''):
             flash('Passwords do not match.')
             return render_template(
                 'register.html', landlords=landlords, google_registration=bool(google_registration),
                 form_values=form_values,
-                verification_sent=not google_registration and registration_challenge_matches(challenge, email, contact_number),
-            )
-        if not contact_number:
-            flash('Enter a valid phone number, including the country code if outside Kenya.')
-            return render_template(
-                'register.html', landlords=landlords, google_registration=bool(google_registration),
-                form_values=form_values,
-                verification_sent=not google_registration and registration_challenge_matches(challenge, email, contact_number),
             )
         if role == 'tenant':
             try:
@@ -696,39 +595,13 @@ def register():
                 return render_template(
                     'register.html', landlords=landlords, google_registration=bool(google_registration),
                     form_values=form_values,
-                    verification_sent=not google_registration and registration_challenge_matches(challenge, email, contact_number),
                 )
         if User.query.filter_by(email=email).first():
             flash('Email already exists.')
             return render_template(
                 'register.html', landlords=landlords, google_registration=bool(google_registration),
                 form_values=form_values,
-                verification_sent=not google_registration and registration_challenge_matches(challenge, email, contact_number),
             )
-
-        if not google_registration:
-            code = request.form.get('verification_code', '').strip()
-            if not registration_challenge_matches(challenge, email, contact_number) or not code:
-                flash('Verify your phone number with the code we sent before creating your account.')
-                return render_template(
-                    'register.html', landlords=landlords, google_registration=False,
-                    form_values=form_values,
-                    verification_sent=registration_challenge_matches(challenge, email, contact_number),
-                )
-            if not hmac.compare_digest(challenge.code_digest, registration_code_digest(contact_number, code)):
-                challenge.attempts += 1
-                if challenge.attempts >= 5:
-                    challenge.consumed_at = datetime.utcnow()
-                    verification_sent = False
-                    flash('Too many incorrect codes. Request a new verification code.')
-                else:
-                    verification_sent = True
-                    flash('That verification code is incorrect.')
-                db.session.commit()
-                return render_template(
-                    'register.html', landlords=landlords, google_registration=False,
-                    form_values=form_values, verification_sent=verification_sent,
-                )
 
         password_to_hash = secrets.token_urlsafe(32) if google_registration else password
         hashed_pw = bcrypt.generate_password_hash(password_to_hash).decode('utf-8')
@@ -739,110 +612,21 @@ def register():
             is_landlord=(role == 'landlord'),
             landlord_id=landlord_id if landlord_id else None,
             name=name,
-            contact_number=contact_number,
         )
         db.session.add(user)
-        if not google_registration:
-            challenge.consumed_at = datetime.utcnow()
         db.session.commit()
-        session.pop('registration_phone_challenge_id', None)
         session.pop('pending_google_registration', None)
-        session.pop('registration_draft', None)
         login_user(user)
         flash('Account created successfully!')
         return redirect(url_for('dashboard'))
-    challenge = RegistrationPhoneChallenge.query.filter_by(
-        challenge_id=session.get('registration_phone_challenge_id')
-    ).first()
-    form_values = session.get('registration_draft', google_registration or {})
+    form_values = google_registration or {}
     return render_template(
         'register.html',
         landlords=landlords,
         google_registration=bool(google_registration),
         form_values=form_values,
-        verification_sent=not google_registration and registration_challenge_matches(
-            challenge, form_values.get('email', ''), form_values.get('contact_number', '')
-        ),
     )
 
-
-@app.route('/api/send-otp', methods=['POST'])
-@app.route('/register/send-code', methods=['POST'], endpoint='send_registration_code')
-def send_otp():
-    data = request.get_json(silent=True)
-    if data is None:
-        data = request.form.to_dict()
-    if not isinstance(data, dict):
-        return jsonify(error='Send registration details as JSON or form data.'), 400
-
-    google_registration = session.get('pending_google_registration')
-    if google_registration:
-        return jsonify(error='Google registrations do not require phone verification.'), 400
-
-    email = str(data.get('email', '')).strip().lower()
-    name = str(data.get('name', '')).strip()
-    role = str(data.get('role', ''))
-    if not name or not email or role not in {'landlord', 'tenant'}:
-        return jsonify(error='Complete your name, email and account type first.'), 400
-    if role == 'tenant':
-        landlord_id = data.get('landlord_id')
-        if not landlord_id or not User.query.filter_by(id=landlord_id, role='landlord').first():
-            return jsonify(error='Select a valid landlord first.'), 400
-
-    if User.query.filter_by(email=email).first():
-        return jsonify(error='An account already exists for this email.'), 409
-    raw_phone = data.get('contact_number') or data.get('phone', '')
-    phone_digits = format_kenyan_phone(str(raw_phone))
-    phone = '+' + phone_digits if phone_digits else None
-    if not phone:
-        return jsonify(error='Enter a valid phone number, including the country code if outside Kenya.'), 400
-    has_password = (
-        data.get('has_password') is True
-        or str(data.get('has_password', '')).lower() in {'true', '1', 'on'}
-        or bool(data.get('password'))
-    )
-    if role != 'google' and not has_password:
-        return jsonify(error='Enter a password before requesting a verification code.'), 400
-
-    now = datetime.utcnow()
-    recent_phone_challenge = RegistrationPhoneChallenge.query.filter_by(phone=phone).order_by(
-        RegistrationPhoneChallenge.sent_at.desc()
-    ).first()
-    if recent_phone_challenge and now - recent_phone_challenge.sent_at < timedelta(seconds=60):
-        wait_seconds = max(1, 60 - int((now - recent_phone_challenge.sent_at).total_seconds()))
-        return jsonify(error=f'Wait {wait_seconds} seconds before requesting another code.', wait_seconds=wait_seconds), 429
-
-    code = str(secrets.randbelow(900000) + 100000)
-    if not send_registration_sms(phone, code):
-        return jsonify(error='We could not send the verification SMS. Please try again later.'), 503
-
-    previous_challenge = RegistrationPhoneChallenge.query.filter_by(
-        challenge_id=session.get('registration_phone_challenge_id')
-    ).first()
-    if previous_challenge and previous_challenge.consumed_at is None:
-        previous_challenge.consumed_at = now
-    RegistrationPhoneChallenge.query.filter_by(phone=phone, consumed_at=None).update(
-        {'consumed_at': now}, synchronize_session=False
-    )
-    challenge = RegistrationPhoneChallenge(
-        challenge_id=secrets.token_urlsafe(32),
-        email=email,
-        phone=phone,
-        code_digest=registration_code_digest(phone, code),
-        sent_at=now,
-        expires_at=now + timedelta(minutes=10),
-    )
-    db.session.add(challenge)
-    db.session.commit()
-    session['registration_phone_challenge_id'] = challenge.challenge_id
-    session['registration_draft'] = {
-        'name': google_registration['name'] if google_registration else name,
-        'email': email,
-        'contact_number': str(raw_phone).strip(),
-        'role': role,
-        'landlord_id': str(data.get('landlord_id', '')),
-    }
-    return jsonify(message='Verification code sent. It is valid for 10 minutes.')
 
 @app.route("/google_login")
 def google_login():
@@ -867,8 +651,6 @@ def google_login():
             return redirect(url_for('login'))
         session['pending_google_registration'] = {'email': email, 'name': name}
         session.pop('google_registration_intent', None)
-        session.pop('registration_phone_challenge_id', None)
-        session.pop('registration_draft', None)
         return redirect(url_for('register'))
 
     session.pop('google_registration_intent', None)
