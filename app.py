@@ -715,6 +715,12 @@ def register():
                 verification_sent=not google_registration and registration_challenge_matches(challenge, email, contact_number),
             )
         if role == 'tenant':
+            try:
+                landlord_id = int(landlord_id)
+            except (TypeError, ValueError):
+                landlord_id = None
+            if landlord_id is not None and not 1 <= landlord_id <= 2147483647:
+                landlord_id = None
             landlord = User.query.filter_by(id=landlord_id, role='landlord').first() if landlord_id else None
             if not landlord:
                 flash('Select a valid landlord.')
@@ -2171,7 +2177,21 @@ def subscription_callback():
 def logout():
     logout_user()
     return redirect(url_for('login'))
-
+# TEMP FIX - Auto add missing columns
+with app.app_context():
+    try:
+        from sqlalchemy import text
+        with db.engine.connect() as conn:
+            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS user_account_number VARCHAR(100)'))
+            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS bank_name VARCHAR(100)'))
+            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(50) DEFAULT \'trial\''))
+            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS subscription_expiry TIMESTAMP'))
+            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS subscription_admin_updated_at TIMESTAMP'))
+            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP'))
+            conn.commit()
+            print("✅ Fixed missing columns!")
+    except Exception as e:
+        print(f"Fix failed: {e}")
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
