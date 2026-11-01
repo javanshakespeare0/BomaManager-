@@ -693,20 +693,14 @@ def register():
             'landlord_id': landlord_id or '',
         }
 
-        if not name or not email or not password or role not in {'landlord', 'tenant'}:
+        if not name or not email or (not google_registration and not password) or role not in {'landlord', 'tenant'}:
             flash('Complete all required account details.')
             return render_template(
                 'register.html', landlords=landlords, google_registration=bool(google_registration),
                 form_values=form_values,
                 verification_sent=not google_registration and registration_challenge_matches(challenge, email, contact_number),
             )
-        if google_registration and len(password) < 6:
-            flash('Password must be at least 6 characters long.')
-            return render_template(
-                'register.html', landlords=landlords, google_registration=True,
-                form_values=form_values, verification_sent=False,
-            )
-        if password != request.form.get('confirm_password', ''):
+        if not google_registration and password != request.form.get('confirm_password', ''):
             flash('Passwords do not match.')
             return render_template(
                 'register.html', landlords=landlords, google_registration=bool(google_registration),
@@ -761,7 +755,8 @@ def register():
                     form_values=form_values, verification_sent=verification_sent,
                 )
 
-        hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
+        password_to_hash = secrets.token_urlsafe(32) if google_registration else password
+        hashed_pw = bcrypt.generate_password_hash(password_to_hash).decode('utf-8')
         user = User(
             email=email,
             password=hashed_pw,
@@ -886,13 +881,13 @@ def google_login():
         return redirect(url_for("login"))
 
     user_info = resp.json()
-    email = user_info["email"]
+    email = user_info.get("email", "").strip().lower()
     name = user_info.get("name", "User")
 
-    user = User.query.filter_by(email=email).first()
+    user = User.query.filter_by(email=email).first() if email else None
 
     if not user:
-        if not user_info.get('verified_email', False):
+        if not email or not user_info.get('verified_email', False):
             flash('Google could not confirm this email address.')
             return redirect(url_for('login'))
         session['pending_google_registration'] = {'email': email, 'name': name}

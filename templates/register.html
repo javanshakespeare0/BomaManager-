@@ -48,7 +48,7 @@
           {% endif %}
         {% endwith %}
 
-        <p class="helper-text">{% if google_registration %}Set a password, choose your account type, and add your phone number to finish creating your account.{% else %}Verify your phone to finish creating your account. We’ll save the verified number to your profile.{% endif %}</p>
+        <p class="helper-text">{% if google_registration %}Choose your account type and add your phone number to finish creating your account.{% else %}Verify your phone to finish creating your account. We’ll save the verified number to your profile.{% endif %}</p>
         <form method="POST" id="registration-form" data-send-code-url="{{ url_for('send_registration_code') }}" data-google-registration="{{ 'true' if google_registration else 'false' }}" data-code-sent-to-phone="{{ form_values.get('contact_number', '') if verification_sent else '' }}">
             {% if google_registration %}
                 <label for="name">Name</label>
@@ -60,14 +60,16 @@
                 <input type="email" name="email" placeholder="Email" value="{{ form_values.get('email', '') }}" required autocomplete="email" style="width: 100%; padding: 10px; margin-bottom: 10px;">
             {% endif %}
 
-            <label for="password">Password</label>
-            <input type="password" name="password" id="password" placeholder="Password" required {% if google_registration %}minlength="6"{% endif %} autocomplete="new-password" style="width: 100%; padding: 10px; margin-bottom: 6px;">
-            <div class="password-meter" aria-live="polite">
-                <div id="password-strength-bar" class="password-strength-bar"></div>
-            </div>
-            <small id="password-strength-text" class="password-strength-text">Password strength:—</small>
-            <label for="confirm-password">Confirm password</label>
-            <input type="password" name="confirm_password" id="confirm-password" placeholder="Re-enter password" required autocomplete="new-password" style="width: 100%; padding: 10px; margin-top: 8px; margin-bottom: 10px;">
+            {% if not google_registration %}
+                <label for="password">Password</label>
+                <input type="password" name="password" id="password" placeholder="Password" required autocomplete="new-password" style="width: 100%; padding: 10px; margin-bottom: 6px;">
+                <div class="password-meter" aria-live="polite">
+                    <div id="password-strength-bar" class="password-strength-bar"></div>
+                </div>
+                <small id="password-strength-text" class="password-strength-text">Password strength:—</small>
+                <label for="confirm-password">Confirm password</label>
+                <input type="password" name="confirm_password" id="confirm-password" placeholder="Re-enter password" required autocomplete="new-password" style="width: 100%; padding: 10px; margin-top: 8px; margin-bottom: 10px;">
+            {% endif %}
             <label for="registration-role">Account type</label>
             <select name="role" id="registration-role" required style="width: 100%; padding: 10px; margin-top: 12px; margin-bottom: 15px;">
                 <option value="">-- Select Role --</option>
