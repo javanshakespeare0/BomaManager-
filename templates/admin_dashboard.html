@@ -73,15 +73,15 @@
       table, tbody, tr, td { display: block; width: 100%; box-sizing: border-box; }
       thead { display: none; }
       tbody tr { margin: 12px 0; padding: 8px 0; border: 1px solid #38504c; border-radius: 7px; background: rgba(17, 28, 27, .45); }
-      tbody td { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; min-width: 0; padding: 9px 11px; border-bottom: 1px solid rgba(56, 80, 76, .65); text-align: right; overflow-wrap: anywhere; }
+      tbody td { display: block; min-width: 0; padding: 10px 11px; border-bottom: 1px solid rgba(56, 80, 76, .65); text-align: left; overflow-wrap: anywhere; }
       tbody td:last-child { border-bottom: 0; }
-      tbody td::before { flex: 0 0 min(38%, 140px); content: attr(data-label); color: #a9bfba; font-weight: 700; text-align: left; }
+      tbody td::before { display: block; margin-bottom: 4px; content: attr(data-label); color: #a9bfba; font-weight: 700; text-align: left; }
       tbody td[colspan] { display: block; text-align: left; }
       tbody td[colspan]::before { display: none; }
       .action { min-width: 0; }
       .action-menu { width: 100%; }
-      .action-menu summary { margin-left: auto; }
-      .action-menu-items { left: 0; right: auto; width: 100%; min-width: 0; max-width: calc(100vw - 48px); box-sizing: border-box; }
+      .action-menu summary { margin-left: 0; }
+      .action-menu-items { position: static; width: 100%; min-width: 0; max-width: 100%; margin-top: 8px; box-sizing: border-box; }
     }
   </style>
 </head>

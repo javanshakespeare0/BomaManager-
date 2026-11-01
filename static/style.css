@@ -654,10 +654,28 @@ body.dashboard-page {
     min-width: 0;
     overflow-x: visible;
 }
+body.dashboard-page *,
+body.dashboard-page *::before,
+body.dashboard-page *::after {
+    box-sizing: border-box;
+}
 .dashboard-page .dashboard-shell {
     box-sizing: border-box;
     width: 100%;
     min-width: 0;
+}
+.dashboard-page .dashboard-shell > *,
+.dashboard-page .dashboard-header > *,
+.dashboard-page .tenant-rent-header > *,
+.landlord-dashboard .monthly-collection-bar > *,
+.landlord-dashboard .countdown-banner > *,
+.landlord-dashboard .destination-heading > *,
+.landlord-dashboard .property-header > *,
+.landlord-dashboard .room-details > *,
+.landlord-dashboard .room-actions > *,
+.landlord-dashboard .portfolio-tools > * {
+    min-width: 0;
+    max-width: 100%;
 }
 .dashboard-page .dashboard-header > div,
 .dashboard-page .dashboard-header-actions,
@@ -723,6 +741,11 @@ body.dashboard-page {
     .dashboard-page .section-actions { width: 100%; }
     .dashboard-page .section-actions form { flex: 1 1 100%; }
     .dashboard-page .section-actions form .btn { width: 100%; }
+    .dashboard-page .tenant-row > div {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        overflow-wrap: anywhere;
+    }
     .property-card { padding: 16px 14px; }
     .property-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .property-actions .btn, .room-actions .btn { min-width: 0; }
@@ -1090,7 +1113,7 @@ body.landlord-dashboard-page {
     flex-wrap: wrap;
     gap: 8px;
 }
-.landlord-dashboard .room-quick-actions form { display: flex; margin: 0; }
+.landlord-dashboard .room-quick-actions form { display: flex; min-width: 0; margin: 0; }
 .landlord-dashboard .room-quick-actions .btn { white-space: nowrap; }
 .landlord-dashboard .room-quick-actions .room-vacate-action {
     border: 1px solid #f0d4cd;
@@ -1122,6 +1145,8 @@ body.landlord-dashboard-page {
 
 @media (max-width: 900px) {
     .landlord-dashboard { padding: 22px; }
+    .landlord-dashboard .dashboard-header { flex-wrap: wrap; }
+    .landlord-dashboard .dashboard-header-actions { flex-wrap: wrap; justify-content: flex-start; }
     .landlord-dashboard .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .landlord-dashboard .countdown-banner { grid-template-columns: 1fr auto; }
     .landlord-dashboard .countdown-action { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; }
