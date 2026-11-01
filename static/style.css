@@ -650,6 +650,36 @@ button, input, select, textarea {
     min-width: 0;
 }
 
+body.dashboard-page {
+    min-width: 0;
+    overflow-x: visible;
+}
+.dashboard-page .dashboard-shell {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+}
+.dashboard-page .dashboard-header > div,
+.dashboard-page .dashboard-header-actions,
+.dashboard-page .section-actions,
+.dashboard-page .tenant-row > div {
+    min-width: 0;
+    max-width: 100%;
+}
+.dashboard-page .dashboard-header h1,
+.dashboard-page .property-card,
+.dashboard-page .tenant-row,
+.dashboard-page .room-details,
+.dashboard-page .section-actions {
+    overflow-wrap: anywhere;
+}
+.dashboard-page .section-actions form {
+    min-width: 0;
+}
+.dashboard-page .section-actions form .btn {
+    max-width: 100%;
+}
+
 @media (max-width: 700px) {
     body { padding: 8px; }
     .container {
@@ -690,6 +720,9 @@ button, input, select, textarea {
     .section-heading { align-items: flex-start; }
     .section-actions { display: flex; flex-wrap: wrap; gap: 8px; }
     .section-actions .btn { flex: 1 1 auto; text-align: center; }
+    .dashboard-page .section-actions { width: 100%; }
+    .dashboard-page .section-actions form { flex: 1 1 100%; }
+    .dashboard-page .section-actions form .btn { width: 100%; }
     .property-card { padding: 16px 14px; }
     .property-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .property-actions .btn, .room-actions .btn { min-width: 0; }
@@ -735,7 +768,6 @@ button, input, select, textarea {
 }
 
 body.landlord-dashboard-page {
-    min-width: 0;
     padding: 18px;
     background: #edf3f2;
     color: #18312d;

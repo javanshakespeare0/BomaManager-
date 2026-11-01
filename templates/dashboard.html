@@ -6,7 +6,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
-<body class="{% if current_user.role == 'landlord' %}landlord-dashboard-page{% endif %}">
+<body class="dashboard-page{% if current_user.role == 'landlord' %} landlord-dashboard-page{% endif %}">
 <div class="container dashboard-shell{% if current_user.role == 'landlord' %} landlord-dashboard{% endif %}">
     <header class="dashboard-header">
         <div>
