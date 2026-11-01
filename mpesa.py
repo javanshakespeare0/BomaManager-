@@ -82,6 +82,9 @@ def stk_push2(
         detail = response.text.strip() or f'HTTP {response.status_code}'
         raise requests.HTTPError(f'Daraja STK request failed: {detail}')
     try:
-        return response.json()
+        result = response.json()
     except ValueError as error:
         raise ValueError('Daraja STK response was not valid JSON') from error
+    if not isinstance(result, dict):
+        raise ValueError('Daraja STK response must be a JSON object')
+    return result

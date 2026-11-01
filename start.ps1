@@ -1,10 +1,8 @@
-# PowerShell script to activate venv and run app
+Set-Location -LiteralPath $PSScriptRoot
 $env:APP_ENV = 'development'
-$env:SECRET_KEY = 'dev-secret-key'
-if (Test-Path -Path .\.venv\Scripts\Activate.ps1) {
-    . .\.venv\Scripts\Activate.ps1
-    python app.py
-} else {
-    Write-Host "Virtual environment not found. Run directly:" -ForegroundColor Yellow
-    Write-Host "c:/Users/HI/OneDrive/Desktop/BomaManager/.venv/Scripts/python.exe app.py" -ForegroundColor Cyan
+$python = Join-Path $PSScriptRoot '.venv\Scripts\python.exe'
+if (-not (Test-Path -LiteralPath $python)) {
+    Write-Error "Virtual environment not found. Create it with: python -m venv .venv"
+    exit 1
 }
+& $python app.py

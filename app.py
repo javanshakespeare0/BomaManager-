@@ -1,5 +1,4 @@
 import sys
-import base64
 import calendar
 import hashlib
 import hmac
@@ -10,13 +9,12 @@ from mpesa import stk_push2
 from datetime import datetime, date, timedelta
 from functools import wraps
 from maintenance import is_maintenance_on, set_maintenance
-if os.getenv('FLASK_ENV', 'production').lower() == 'development':
+if (os.getenv('APP_ENV') or os.getenv('FLASK_ENV') or 'development').lower() == 'development':
     os.environ.setdefault('OAUTHLIB_INSECURE_TRANSPORT', '1')
 try:
     import africastalking
     from africastalking.Service import AfricasTalkingException
     import requests
-    from requests.auth import HTTPBasicAuth
     from sqlalchemy import inspect, or_
     from sqlalchemy.exc import IntegrityError, SQLAlchemyError
     from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
@@ -60,8 +58,6 @@ app.register_blueprint(blueprint, url_prefix="/login")
 
 # M-PESA DARAJA CONFIGURATION. Production values must be supplied through the
 # environment; the defaults keep the existing sandbox setup usable locally.
-DARAJA_ENV = os.getenv('DARAJA_ENV', os.getenv('MPESA_ENV', 'sandbox')).lower()
-DARAJA_BASE_URL = 'https://api.safaricom.co.ke' if DARAJA_ENV == 'production' else 'https://sandbox.safaricom.co.ke'
 CONSUMER_KEY = os.getenv('MPESA_CONSUMER_KEY', '')
 CONSUMER_SECRET = os.getenv('MPESA_CONSUMER_SECRET', '')
 BUSINESS_SHORTCODE = os.getenv('MPESA_BUSINESS_SHORTCODE', '174379')
@@ -331,21 +327,7 @@ class SubscriptionPaymentAttempt(db.Model):
     outcome = db.Column(db.String(20), nullable=False, default='pending')
 
 
-with app.app_context():
-    db.create_all()
-
 # ==================== HELPERS ====================
-def get_access_token():
-    if not CONSUMER_KEY or not CONSUMER_SECRET:
-        raise ValueError('M-Pesa consumer credentials are not configured')
-    api_url = f"{DARAJA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials"
-    response = requests.get(api_url, auth=HTTPBasicAuth(CONSUMER_KEY, CONSUMER_SECRET), timeout=20)
-    response.raise_for_status()
-    try:
-        return response.json()['access_token']
-    except (KeyError, TypeError, ValueError) as error:
-        raise ValueError('Daraja token response did not contain an access token') from error
-
 def ensure_user_columns():
     columns = {column['name'] for column in inspect(db.engine).get_columns('user')}
     additions = {
@@ -381,14 +363,6 @@ def ensure_user_columns():
             ).values(trial_ends_at=datetime.utcnow() + timedelta(days=14))
         )
 
-with app.app_context():
-    ensure_user_columns()
-
-
-def ensure_payout_columns():
-    ensure_user_columns()
-
-
 def ensure_property_columns():
     property_columns = {column['name'] for column in inspect(db.engine).get_columns('property')}
     room_columns = {column['name'] for column in inspect(db.engine).get_columns('room')}
@@ -407,11 +381,14 @@ def ensure_property_columns():
                 connection.exec_driver_sql(f'ALTER TABLE room ADD COLUMN {name} {column_type}')
 
 
-def ensure_pending_bill_table():
-    inspector = inspect(db.engine)
-    existing_tables = set(inspector.get_table_names())
-    if 'pending_bill' not in existing_tables:
-        db.create_all()
+def initialize_database():
+    db.create_all()
+    ensure_user_columns()
+    ensure_property_columns()
+
+
+with app.app_context():
+    initialize_database()
 
 
 def generate_room_numbers(room_type, room_count, prefix=None, start_number=1):
@@ -614,14 +591,6 @@ def send_registration_sms(phone, code):
         return False
 
 
-def maintenance_check(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        # Allow admin to still access
-        if is_maintenance_on() and not request.path.startswith('/admin'):
-            return render_template('maintenance.html'), 503
-        return f(*args, **kwargs)
-    return decorated
 # ==================== AUTH ROUTES ====================
 @app.route('/admin/toggle-maintenance', methods=['POST'])
 def toggle_maintenance():
@@ -1063,8 +1032,6 @@ def dashboard():
         period_keys = [period['key'] for period in current_period_by_room.values() if period]
         water_bills = {bill.room_id: bill for bill in WaterBill.query.filter(WaterBill.month.in_(period_keys)).all()} if period_keys else {}
         pending_bills_by_room = {bill.room_id: bill for bill in PendingBill.query.filter(PendingBill.month.in_(period_keys)).all()} if period_keys else {}
-        room_ids = [room.id for prop in properties for room in prop.rooms]
-        payments = Payment.query.filter(Payment.room_id.in_(room_ids), Payment.month.in_(period_keys)).all() if room_ids and period_keys else []
         payments_by_room = {room_id: get_payment_summary(room, current_period_by_room[room_id]['key']) for room_id, room in [(room.id, room) for prop in properties for room in prop.rooms] if current_period_by_room[room_id]}
         now = datetime.utcnow()
         month_start = datetime(now.year, now.month, 1)
@@ -1333,7 +1300,6 @@ def mark_rent_paid(room_id):
     period_key = current_period['key']
     summary = get_payment_summary(room, period_key)
     if summary['balance'] > 0:
-        water_bill = WaterBill.query.filter_by(room_id=room.id, month=period_key).first()
         payment = Payment(
             amount=summary['balance'],
             month=period_key,
@@ -1785,11 +1751,14 @@ def stk_push(room_id):
             passkey=PASSKEY,
             callback_url=CALLBACK_URL,
         )
-    except (requests.RequestException, ValueError) as error:
-        print(f'STK request error: {error}')
-        flash(f'M-Pesa request failed: {error}')
+    except (requests.RequestException, ValueError):
+        app.logger.exception(
+            'Rent STK request failed for tenant %s and room %s',
+            current_user.id,
+            room.id,
+        )
+        flash('M-Pesa is temporarily unavailable. Please try again later.')
         return redirect(url_for('pay_rent', room_id=room_id))
-    print("STK Response:", data)
 
     if str(data.get('ResponseCode')) == '0':
         checkout_request_id = data.get('CheckoutRequestID')
@@ -1952,7 +1921,7 @@ def subscription_page():
     requires_pro = current_user.role == 'landlord' and (
         room_count > 20 or (request.args.get('upgrade') == 'pro' and room_count >= 20)
     )
-    return render_template('subsription.html',
+    return render_template('subscription.html',
                            user=current_user,
                            days_left=current_user.days_remaining(),
                            room_count=room_count,
@@ -1986,45 +1955,29 @@ def pay_subscription():
         flash('M-Pesa is not configured yet. Set the Daraja credentials in the environment.', 'danger')
         return redirect(url_for('subscription_page'))
 
-    try:
-        access_token = get_access_token()
-    except (requests.RequestException, ValueError) as error:
-        app.logger.error('Subscription Daraja token request failed: %s', error)
-        flash('M-Pesa is temporarily unavailable. Check the Daraja credentials and try again.', 'danger')
-        return redirect(url_for('subscription_page'))
-
     if not valid_callback_url(SUBSCRIPTION_CALLBACK_URL):
         flash('M-Pesa is not configured yet. Set MPESA_SUBSCRIPTION_CALLBACK_URL to a public HTTPS callback URL.', 'danger')
         return redirect(url_for('subscription_page'))
-    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-    password = base64.b64encode((BUSINESS_SHORTCODE + PASSKEY + timestamp).encode()).decode('utf-8')
-
-    payload = {
-        "BusinessShortCode": BUSINESS_SHORTCODE,
-        "Password": password,
-        "Timestamp": timestamp,
-        "TransactionType": "CustomerPayBillOnline",
-        "Amount": amount,
-        "PartyA": phone,
-        "PartyB": BUSINESS_SHORTCODE,
-        "PhoneNumber": phone,
-        "CallBackURL": SUBSCRIPTION_CALLBACK_URL,
-        "AccountReference": f"SUB_Landlord{current_user.id}_{plan}",
-        "TransactionDesc": f"BomaManager {plan} Subscription"
-    }
-
-    url = f"{DARAJA_BASE_URL}/mpesa/stkpush/v1/processrequest"
-    headers = {"Authorization": f"Bearer {access_token}"}
     requested_at = datetime.utcnow()
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=20)
-        response_data = response.json()
-    except (requests.RequestException, ValueError) as error:
-        print(f'Subscription M-Pesa request error: {error}')
+        response_data = stk_push2(
+            phone,
+            amount,
+            account_reference=f'SUB_Landlord{current_user.id}_{plan}',
+            description=f'BomaManager {plan} Subscription',
+            consumer_key=CONSUMER_KEY,
+            consumer_secret=CONSUMER_SECRET,
+            business_shortcode=BUSINESS_SHORTCODE,
+            passkey=PASSKEY,
+            callback_url=SUBSCRIPTION_CALLBACK_URL,
+        )
+    except (requests.RequestException, ValueError):
+        app.logger.exception(
+            'Subscription STK request failed for landlord %s',
+            current_user.id,
+        )
         flash('M-Pesa is temporarily unavailable. Please try again or use bank transfer.', 'danger')
         return redirect(url_for('subscription_page'))
-
-    print('Subscription STK response:', response_data)
     if str(response_data.get('ResponseCode')) == '0':
         checkout_request_id = response_data.get('CheckoutRequestID')
         if not checkout_request_id:
@@ -2177,26 +2130,5 @@ def subscription_callback():
 def logout():
     logout_user()
     return redirect(url_for('login'))
-# TEMP FIX - Auto add missing columns
-with app.app_context():
-    try:
-        from sqlalchemy import text
-        with db.engine.connect() as conn:
-            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS user_account_number VARCHAR(100)'))
-            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS bank_name VARCHAR(100)'))
-            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(50) DEFAULT \'trial\''))
-            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS subscription_expiry TIMESTAMP'))
-            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS subscription_admin_updated_at TIMESTAMP'))
-            conn.execute(text('ALTER TABLE "user" ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP'))
-            conn.commit()
-            print("✅ Fixed missing columns!")
-    except Exception as e:
-        print(f"Fix failed: {e}")
 if __name__ == '__main__':
-    with app.app_context():
-        db.create_all()
-        ensure_user_columns()
-        ensure_payout_columns()
-        ensure_property_columns()
-        ensure_pending_bill_table()
-    app.run(debug=True)
+    app.run(debug=APP_ENV == 'development')

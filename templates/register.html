@@ -1,39 +1,11 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Register - BomaManager</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
-    <style>
-      .google-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            background: #ffffff;
-            color: #444;
-            border: 1px solid #ddd;
-            padding: 12px;
-            text-align: center;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: 500;
-            font-size: 15px;
-            margin-top: 10px;
-            transition: 0.2s;
-        }
-      .google-btn:hover { background: #f5f5f5; }
-      .divider {
-            display: flex; align-items: center; text-align: center;
-            margin: 20px 0; color: #888;
-        }
-      .divider::before,.divider::after {
-            content: ''; flex: 1; border-bottom: 1px solid #ddd;
-        }
-      .divider:not(:empty)::before { margin-right:.5em; }
-      .divider:not(:empty)::after { margin-left:.5em; }
-    </style>
 </head>
 <body>
 <div class="container auth-shell">
@@ -42,7 +14,7 @@
         <h1>Create account</h1>
         {% with messages = get_flashed_messages() %}
           {% if messages %}
-            <div class="flash" style="background: #ffdddd; color: #a94442; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+            <div class="flash">
                 {{ messages[0] }}
             </div>
           {% endif %}
@@ -56,29 +28,29 @@
                 <label for="email">Google account email</label>
                 <input type="email" id="email" name="email" value="{{ form_values.get('email', '') }}" readonly required>
             {% else %}
-                <input type="text" name="name" placeholder="User name" value="{{ form_values.get('name', '') }}" required maxlength="100" autocomplete="name" style="width: 100%; padding: 10px; margin-bottom: 10px;">
-                <input type="email" name="email" placeholder="Email" value="{{ form_values.get('email', '') }}" required autocomplete="email" style="width: 100%; padding: 10px; margin-bottom: 10px;">
+                <input type="text" name="name" placeholder="Full name" value="{{ form_values.get('name', '') }}" required maxlength="100" autocomplete="name">
+                <input type="email" name="email" placeholder="Email" value="{{ form_values.get('email', '') }}" required autocomplete="email">
             {% endif %}
 
             {% if not google_registration %}
                 <label for="password">Password</label>
-                <input type="password" name="password" id="password" placeholder="Password" required autocomplete="new-password" style="width: 100%; padding: 10px; margin-bottom: 6px;">
+                <input type="password" name="password" id="password" placeholder="Password" required autocomplete="new-password">
                 <div class="password-meter" aria-live="polite">
                     <div id="password-strength-bar" class="password-strength-bar"></div>
                 </div>
                 <small id="password-strength-text" class="password-strength-text">Password strength:—</small>
                 <label for="confirm-password">Confirm password</label>
-                <input type="password" name="confirm_password" id="confirm-password" placeholder="Re-enter password" required autocomplete="new-password" style="width: 100%; padding: 10px; margin-top: 8px; margin-bottom: 10px;">
+                <input type="password" name="confirm_password" id="confirm-password" placeholder="Re-enter password" required autocomplete="new-password">
             {% endif %}
             <label for="registration-role">Account type</label>
-            <select name="role" id="registration-role" required style="width: 100%; padding: 10px; margin-top: 12px; margin-bottom: 15px;">
+            <select name="role" id="registration-role" required>
                 <option value="">-- Select Role --</option>
                 <option value="landlord"{% if form_values.get('role') == 'landlord' %} selected{% endif %}>Landlord</option>
                 <option value="tenant"{% if form_values.get('role') == 'tenant' %} selected{% endif %}>Tenant</option>
             </select>
             <div id="landlord-field" {% if form_values.get('role') != 'tenant' %}hidden{% endif %}>
                 <label for="landlord_id">Choose your landlord</label>
-                <select name="landlord_id" id="landlord_id" style="width: 100%; padding: 10px; margin-bottom: 15px;">
+                <select name="landlord_id" id="landlord_id">
                     <option value="">-- Select Your Landlord --</option>
                     {% for landlord in landlords %}
                         <option value="{{ landlord.id }}"{% if form_values.get('landlord_id')|string == landlord.id|string %} selected{% endif %}>{{ landlord.name or landlord.email }} · {{ landlord.contact_number or 'No phone number' }} · {{ landlord.email }}</option>
@@ -90,17 +62,17 @@
             <small class="helper-text">Kenyan numbers like 07… or 01… are accepted. International numbers should include + and the country code.</small>
 
             {% if google_registration %}
-                <button type="submit" style="width: 100%; padding: 12px; margin-top: 10px; background: #28a745; color: white; border: none; border-radius: 5px;">Create account</button>
+                <button type="submit" class="btn auth-submit">Create account</button>
             {% else %}
                 <div id="verification-fields" {% if not verification_sent %}hidden{% endif %}>
                     <label for="verification_code">Verification code</label>
                     <input type="text" name="verification_code" id="verification_code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="6-digit code" {% if verification_sent %}required{% endif %}>
                 </div>
                 <p id="verification-message" class="helper-text" role="status" aria-live="polite">{% if verification_sent %}Enter the code we sent to your phone.{% endif %}</p>
-                <button type="button" id="send-verification-code" style="width: 100%; padding: 12px; background: #26796d; color: white; border: none; border-radius: 5px;">
+                <button type="button" id="send-verification-code" class="btn auth-submit">
                     {{ 'Resend verification code' if verification_sent else 'Send verification code' }}
                 </button>
-                <button type="submit" id="complete-registration" {% if not verification_sent %}hidden{% endif %} style="width: 100%; padding: 12px; margin-top: 10px; background: #28a745; color: white; border: none; border-radius: 5px;">
+                <button type="submit" id="complete-registration" class="btn auth-submit" {% if not verification_sent %}hidden{% endif %}>
                     Verify code and create account
                 </button>
             {% endif %}
@@ -114,9 +86,7 @@
             </a>
         {% endif %}
 
-        <p style="text-align: center; margin-top: 20px;">
-            Already have an account? <a href="{{ url_for('login') }}">Login</a>
-        </p>
+        <p class="auth-footer">Already have an account? <a href="{{ url_for('login') }}">Log in</a></p>
     </div>
 </div>
 <script>
