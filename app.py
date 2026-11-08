@@ -822,6 +822,10 @@ def dashboard():
             Property.landlord_id == current_user.id,
             RoomRequest.status == 'pending',
         ).order_by(RoomRequest.requested_at.asc()).all()
+        maintenance_attention_count = MaintenanceRequest.query.join(Room).join(Property).filter(
+            Property.landlord_id == current_user.id,
+            MaintenanceRequest.status.in_(('open', 'in_progress')),
+        ).count()
         current_period_by_room = {room.id: get_billing_period(room) for prop in properties for room in prop.rooms}
         period_keys = [period['key'] for period in current_period_by_room.values() if period]
         water_bills = {bill.room_id: bill for bill in WaterBill.query.filter(WaterBill.month.in_(period_keys)).all()} if period_keys else {}
@@ -837,9 +841,26 @@ def dashboard():
         ).scalar() or 0
         total_rooms = sum(len(prop.rooms) for prop in properties)
         occupied_rooms = sum(room.is_occupied for prop in properties for room in prop.rooms)
+        landlord_rooms = [room for prop in properties for room in prop.rooms]
+        vacant_rooms = sum(1 for room in landlord_rooms if not room.tenant)
+        rent_due_rooms = sum(
+            1
+            for room in landlord_rooms
+            if room.tenant and (
+                not payments_by_room.get(room.id)
+                or payments_by_room[room.id]['balance'] > 0
+            )
+        )
+        paid_rooms = sum(
+            1
+            for room in landlord_rooms
+            if room.tenant
+            and payments_by_room.get(room.id)
+            and payments_by_room[room.id]['balance'] == 0
+        )
         subscription_deadline = current_user.subscription_deadline()
         subscription_countdown = get_countdown_parts(subscription_deadline)
-        return render_template('dashboard.html', properties=properties, tenants=tenants, room_requests=room_requests, room=None, payment_status=None, water_bills=water_bills, pending_bills_by_room=pending_bills_by_room, payments_by_room=payments_by_room, current_period_by_room=current_period_by_room, total_month_collection=total_month_collection, total_rooms=total_rooms, occupied_rooms=occupied_rooms, current_month_label=datetime.now().strftime('%B %Y'), subscription_deadline=subscription_deadline, subscription_countdown=subscription_countdown)
+        return render_template('dashboard.html', properties=properties, tenants=tenants, room_requests=room_requests, maintenance_attention_count=maintenance_attention_count, vacant_rooms=vacant_rooms, rent_due_rooms=rent_due_rooms, paid_rooms=paid_rooms, room=None, payment_status=None, water_bills=water_bills, pending_bills_by_room=pending_bills_by_room, payments_by_room=payments_by_room, current_period_by_room=current_period_by_room, total_month_collection=total_month_collection, total_rooms=total_rooms, occupied_rooms=occupied_rooms, current_month_label=datetime.now().strftime('%B %Y'), subscription_deadline=subscription_deadline, subscription_countdown=subscription_countdown)
     else:
         properties = None
         room = None

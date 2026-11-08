@@ -32,7 +32,12 @@
             <a href="{{ url_for('add_tenant') }}" class="btn secondary-action">Add tenant</a>
             <a href="{{ url_for('subscription_page') }}" class="btn secondary-action">Subscription</a>
             <a href="{{ url_for('payment_history') }}" class="btn secondary-action">Payment history</a>
-            <a href="{{ url_for('maintenance_requests') }}" class="btn secondary-action">Maintenance</a>
+            <a href="{{ url_for('maintenance_requests') }}" class="btn secondary-action dashboard-action-with-count">
+                Maintenance
+                {% if maintenance_attention_count %}
+                    <span class="attention-badge" data-attention-count="{{ maintenance_attention_count }}" aria-label="{{ maintenance_attention_count }} unresolved maintenance requests">{{ maintenance_attention_count }}</span>
+                {% endif %}
+            </a>
             <a href="{{ url_for('update_contact') }}" class="btn secondary-action">Update contact</a>
             <a href="{{ url_for('settings') }}" class="btn secondary-action">Payment destination</a>
         </nav>
@@ -103,7 +108,11 @@
                     <p class="eyebrow">Room applications</p>
                     <h2>Pending room requests</h2>
                 </div>
-                <span class="count-badge">{{ room_requests|length }} pending</span>
+                {% if room_requests|length %}
+                    <span class="attention-badge" data-attention-count="{{ room_requests|length }}" aria-label="{{ room_requests|length }} pending room requests">{{ room_requests|length }}</span>
+                {% else %}
+                    <span class="count-badge">0 pending</span>
+                {% endif %}
             </div>
             {% if room_requests %}
                 {% for room_request in room_requests %}
@@ -202,10 +211,13 @@
                     <input type="search" id="portfolio-search" placeholder="Property, room, tenant or phone" autocomplete="off">
                 </label>
                 <div class="room-filters" role="group" aria-label="Filter rooms">
-                    <button type="button" class="room-filter is-active" data-room-filter="all" aria-pressed="true">All rooms</button>
-                    <button type="button" class="room-filter" data-room-filter="due" aria-pressed="false">Rent due</button>
-                    <button type="button" class="room-filter" data-room-filter="vacant" aria-pressed="false">Vacant</button>
-                    <button type="button" class="room-filter" data-room-filter="paid" aria-pressed="false">Paid</button>
+                    <button type="button" class="room-filter is-active" data-room-filter="all" aria-pressed="true">All rooms ({{ total_rooms }})</button>
+                    <button type="button" class="room-filter" data-room-filter="due" aria-pressed="false">
+                        Rent due
+                        {% if rent_due_rooms %}<span class="attention-badge" data-attention-count="{{ rent_due_rooms }}" aria-label="{{ rent_due_rooms }} {{ 'room needs' if rent_due_rooms == 1 else 'rooms need' }} rent follow-up">{{ rent_due_rooms }}</span>{% else %}(0){% endif %}
+                    </button>
+                    <button type="button" class="room-filter" data-room-filter="vacant" aria-pressed="false">Vacant ({{ vacant_rooms }})</button>
+                    <button type="button" class="room-filter" data-room-filter="paid" aria-pressed="false">Paid ({{ paid_rooms }})</button>
                 </div>
                 <p class="portfolio-results" data-portfolio-results role="status" aria-live="polite"></p>
             </section>
@@ -505,6 +517,10 @@
             roomFilters.forEach(function (button) {
                 button.addEventListener('click', function () {
                     activeFilter = button.dataset.roomFilter || 'all';
+                    if (activeFilter === 'all') {
+                        if (searchInput) searchInput.value = '';
+                        propertyCards.forEach(function (card) { setPropertyExpanded(card, true); });
+                    }
                     roomFilters.forEach(function (filterButton) {
                         const isActive = filterButton === button;
                         filterButton.classList.toggle('is-active', isActive);

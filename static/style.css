@@ -377,6 +377,20 @@ input, select {
 .secondary-action:hover {
     box-shadow: 0 8px 18px rgba(33, 92, 84, 0.12);
 }
+.dashboard-action-with-count { display: inline-flex; align-items: center; gap: 8px; }
+.attention-badge {
+    display: inline-grid;
+    place-items: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: #b83d35;
+    color: #fff;
+    font: 700 0.75rem/1 Arial, sans-serif;
+    box-sizing: border-box;
+}
+.dashboard-action-with-count .attention-badge { background: #b83d35; color: #fff; }
 .section-heading { margin: 8px 0 14px; }
 .maintenance-requests-shell { max-width: 860px; }
 .maintenance-form-card, .maintenance-request-list { margin: 20px 0; }

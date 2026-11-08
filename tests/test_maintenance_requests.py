@@ -57,6 +57,7 @@ class MaintenanceRequestTests(unittest.TestCase):
             self.tenant_id = self.tenant.id
             self.other_tenant_id = self.other_tenant.id
             self.room_id = self.room.id
+            self.property_id = self.property.id
         self.client = app.test_client()
 
     def tearDown(self):
@@ -105,6 +106,60 @@ class MaintenanceRequestTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         with app.app_context():
             self.assertEqual(db.session.get(MaintenanceRequest, item_id).status, 'in_progress')
+
+    def test_dashboard_shows_unresolved_attention_counts(self):
+        with app.app_context():
+            from app import RoomRequest
+
+            db.session.add(RoomRequest(room_id=self.room_id, tenant_id=self.tenant_id))
+            db.session.add_all([
+                MaintenanceRequest(
+                    title='Open issue',
+                    description='Needs review.',
+                    room_id=self.room_id,
+                    tenant_id=self.tenant_id,
+                ),
+                MaintenanceRequest(
+                    title='In progress issue',
+                    description='Being fixed.',
+                    status='in_progress',
+                    room_id=self.room_id,
+                    tenant_id=self.tenant_id,
+                ),
+                MaintenanceRequest(
+                    title='Resolved issue',
+                    description='Already fixed.',
+                    status='resolved',
+                    room_id=self.room_id,
+                    tenant_id=self.tenant_id,
+                ),
+            ])
+            db.session.commit()
+        self.login_as(self.landlord_id)
+
+        response = self.client.get('/dashboard')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'data-attention-count="2"', response.data)
+        self.assertIn(b'All rooms (1)', response.data)
+        self.assertIn(b'aria-label="1 room needs rent follow-up"', response.data)
+
+    def test_dashboard_all_rooms_includes_vacant_and_occupied_rooms(self):
+        with app.app_context():
+            db.session.add(Room(
+                room_number='102',
+                rent_amount=10000,
+                property_id=self.property_id,
+            ))
+            db.session.commit()
+        self.login_as(self.landlord_id)
+
+        response = self.client.get('/dashboard')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'All rooms (2)', response.data)
+        self.assertIn(b'Room 101', response.data)
+        self.assertIn(b'Room 102', response.data)
 
     def test_landlord_invalid_request_id_does_not_error(self):
         self.login_as(self.landlord_id)
