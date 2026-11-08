@@ -1324,3 +1324,251 @@ html[data-theme="contrast"] .landlord-dashboard .room-filter.is-active { backgro
     .landlord-dashboard *::before,
     .landlord-dashboard *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
 }
+
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+    color-scheme: light;
+    --page-bg: #f2f6f4;
+    --page-bg-end: #e8f0ed;
+    --surface: #ffffff;
+    --surface-raised: #f8fbfa;
+    --text: #20332f;
+    --text-muted: #687b75;
+    --border: #dce7e3;
+    --accent: #217768;
+    --accent-strong: #175f53;
+    --focus-ring: rgba(33, 119, 104, .28);
+}
+
+html[data-theme="dark"] {
+    color-scheme: dark;
+    --page-bg: #111b19;
+    --page-bg-end: #172521;
+    --surface: #1d2a27;
+    --surface-raised: #24332f;
+    --text: #e6efeb;
+    --text-muted: #a7bbb4;
+    --border: #394d47;
+    --accent: #55b5a2;
+    --accent-strong: #287c6d;
+    --focus-ring: rgba(85, 181, 162, .32);
+}
+
+html[data-theme="contrast"] {
+    color-scheme: dark;
+    --page-bg: #000000;
+    --page-bg-end: #000000;
+    --surface: #101010;
+    --surface-raised: #171717;
+    --text: #ffffff;
+    --text-muted: #ffffff;
+    --border: #ffffff;
+    --accent: #65d9ff;
+    --accent-strong: #004c3c;
+    --focus-ring: rgba(101, 217, 255, .55);
+}
+
+body {
+    min-height: 100vh;
+    padding: clamp(12px, 2.4vw, 30px);
+    background:
+        radial-gradient(ellipse at 92% 0%, rgba(86, 159, 139, .12), transparent 34rem),
+        linear-gradient(145deg, var(--page-bg), var(--page-bg-end));
+    color: var(--text);
+    font-family: Inter, "Segoe UI", Arial, sans-serif;
+    line-height: 1.5;
+}
+
+.container {
+    width: min(100%, 1220px);
+    margin: clamp(8px, 1.5vw, 18px) auto;
+    padding: clamp(20px, 3vw, 34px);
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    background: var(--surface);
+    box-shadow: 0 18px 55px rgba(22, 52, 45, .09);
+}
+
+h1, h2, h3 { color: var(--text); letter-spacing: -.025em; }
+h1 { line-height: 1.15; }
+h2, h3 { line-height: 1.25; }
+a { color: var(--accent); }
+a:hover { color: var(--accent-strong); }
+.muted, .helper-text { color: var(--text-muted); }
+
+button, .btn {
+    min-height: 42px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #278675, #176456);
+    box-shadow: 0 5px 13px rgba(23, 100, 86, .16);
+}
+
+button:hover, .btn:hover {
+    box-shadow: 0 8px 18px rgba(23, 100, 86, .22);
+}
+
+button:focus-visible, .btn:focus-visible, a:focus-visible,
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 3px solid var(--focus-ring);
+    outline-offset: 2px;
+}
+
+input, select, textarea {
+    min-height: 44px;
+    border-color: var(--border);
+    border-radius: 10px;
+    background: var(--surface-raised);
+    color: var(--text);
+    font: 1rem/1.4 "Segoe UI", Arial, sans-serif;
+}
+
+input:focus, select:focus, textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.property-card, .tenant-row, .room-row, .settings-card, .auth-card,
+.maintenance-request-list, .maintenance-form-card, .plan-card,
+.collection-summary, .payment-record {
+    border-color: var(--border);
+    border-radius: 16px;
+    background: var(--surface);
+    box-shadow: 0 8px 24px rgba(22, 52, 45, .055);
+}
+
+.property-card, .room-row { border-left-color: var(--accent); }
+.flash {
+    border-color: #b7ddca;
+    border-radius: 11px;
+    background: #e9f7ef;
+    color: #245c40;
+}
+.dashboard-page .dashboard-shell {
+    max-width: 1440px;
+    padding: clamp(16px, 2.8vw, 34px);
+}
+.dashboard-page .landlord-dashboard {
+    background: var(--surface-raised);
+}
+.landlord-dashboard .dashboard-header {
+    box-shadow: 0 14px 32px rgba(20, 75, 65, .14);
+}
+.landlord-dashboard .overview-card,
+.landlord-dashboard .landlord-property-card,
+.landlord-dashboard .tenant-directory,
+.landlord-dashboard .portfolio-tools,
+.landlord-dashboard .dashboard-actions {
+    box-shadow: 0 7px 20px rgba(24, 49, 45, .045);
+}
+
+html[data-theme="dark"] body {
+    background:
+        radial-gradient(ellipse at 92% 0%, rgba(45, 114, 100, .2), transparent 34rem),
+        var(--page-bg);
+}
+
+html[data-theme="dark"] .container,
+html[data-theme="dark"] .property-card,
+html[data-theme="dark"] .tenant-row,
+html[data-theme="dark"] .room-row,
+html[data-theme="dark"] .settings-card,
+html[data-theme="dark"] .auth-card,
+html[data-theme="dark"] .maintenance-request-list,
+html[data-theme="dark"] .maintenance-form-card,
+html[data-theme="dark"] .plan-card,
+html[data-theme="dark"] .collection-summary,
+html[data-theme="dark"] .payment-record {
+    border-color: var(--border);
+    background: var(--surface);
+    color: var(--text);
+}
+
+html[data-theme="dark"] h1,
+html[data-theme="dark"] h2,
+html[data-theme="dark"] h3,
+html[data-theme="dark"] .room-main strong,
+html[data-theme="dark"] .overview-card strong { color: var(--text); }
+
+html[data-theme="dark"] input,
+html[data-theme="dark"] select,
+html[data-theme="dark"] textarea {
+    border-color: var(--border);
+    background: var(--surface-raised);
+    color: var(--text);
+}
+
+html[data-theme="dark"] .flash {
+    border-color: #456b58;
+    background: #203d2c;
+    color: #c7f1d5;
+}
+
+html[data-theme="contrast"] body { background: var(--page-bg); color: var(--text); }
+html[data-theme="contrast"] .container,
+html[data-theme="contrast"] .property-card,
+html[data-theme="contrast"] .tenant-row,
+html[data-theme="contrast"] .room-row,
+html[data-theme="contrast"] .settings-card,
+html[data-theme="contrast"] .auth-card,
+html[data-theme="contrast"] .maintenance-request-list,
+html[data-theme="contrast"] .maintenance-form-card,
+html[data-theme="contrast"] .plan-card,
+html[data-theme="contrast"] .collection-summary,
+html[data-theme="contrast"] .payment-record {
+    border-color: var(--border);
+    background: var(--surface);
+    color: var(--text);
+}
+
+@media (max-width: 700px) {
+    body {
+        min-width: 0;
+        padding: 10px;
+    }
+
+    .container {
+        width: 100%;
+        margin: 0 auto;
+        padding: 20px 16px;
+        border-radius: 18px;
+    }
+
+    .dashboard-page .dashboard-shell {
+        padding: 14px;
+    }
+
+    .auth-shell {
+        min-height: calc(100svh - 20px);
+        padding: 10px 0;
+    }
+
+    .auth-card { padding: 22px 18px; }
+    .property-card, .room-row, .tenant-row { padding: 16px; }
+    .settings-card { padding: 20px 16px; }
+    .settings-actions { align-items: stretch; flex-direction: column; }
+    .settings-actions button { width: 100%; }
+    .payment-section { padding: 16px 14px 8px; }
+    .payment-record-header { align-items: flex-start; flex-direction: column; }
+    .payment-breakdown { gap: 8px; }
+    .subscription-shell, .maintenance-requests-shell { max-width: 100%; }
+    .plan-grid { gap: 12px; }
+}
+
+@media (max-width: 380px) {
+    body { padding: 7px; }
+    .container { padding: 17px 12px; border-radius: 15px; }
+    .dashboard-page .dashboard-shell { padding: 10px; }
+    .auth-card { padding: 20px 14px; }
+    .countdown-grid { gap: 6px; }
+    .countdown-box { padding: 8px 4px; }
+    .countdown-box strong { font-size: 1.1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+    }
+}
