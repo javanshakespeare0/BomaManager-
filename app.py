@@ -955,8 +955,13 @@ def maintenance_requests():
         return "Access Denied", 403
 
     if request.method == 'POST':
+        try:
+            request_id = int(request.form.get('request_id', ''))
+        except (TypeError, ValueError):
+            flash('Invalid maintenance request.', 'warning')
+            return redirect(url_for('maintenance_requests'))
         maintenance_request = MaintenanceRequest.query.join(Room).join(Property).filter(
-            MaintenanceRequest.id == request.form.get('request_id'),
+            MaintenanceRequest.id == request_id,
             Property.landlord_id == current_user.id,
         ).first_or_404()
         status = request.form.get('status', '')

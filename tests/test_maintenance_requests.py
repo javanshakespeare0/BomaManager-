@@ -106,6 +106,17 @@ class MaintenanceRequestTests(unittest.TestCase):
         with app.app_context():
             self.assertEqual(db.session.get(MaintenanceRequest, item_id).status, 'in_progress')
 
+    def test_landlord_invalid_request_id_does_not_error(self):
+        self.login_as(self.landlord_id)
+
+        response = self.client.post('/maintenance-requests', data={
+            'request_id': 'invalid',
+            'status': 'resolved',
+        }, follow_redirects=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'Invalid maintenance request.', response.data)
+
     def test_tenant_cannot_change_request_status(self):
         with app.app_context():
             item = MaintenanceRequest(
