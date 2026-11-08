@@ -1572,3 +1572,449 @@ html[data-theme="contrast"] .payment-record {
         transition-duration: .01ms !important;
     }
 }
+
+.dashboard-page .landlord-dashboard {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(18px, 2.2vw, 28px);
+    padding: clamp(18px, 3vw, 36px);
+}
+
+.dashboard-page .landlord-dashboard > * {
+    width: 100%;
+    min-width: 0;
+    margin-block: 0;
+}
+
+.dashboard-page .landlord-dashboard .dashboard-header {
+    min-height: 0;
+    align-items: center;
+    gap: 24px;
+    padding: clamp(22px, 3vw, 34px);
+}
+
+.dashboard-page .landlord-dashboard .dashboard-header h1 {
+    max-width: 24ch;
+    overflow-wrap: anywhere;
+}
+
+.dashboard-page .landlord-dashboard .dashboard-header-actions {
+    flex: 0 0 auto;
+}
+
+.dashboard-page .landlord-dashboard .dashboard-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px;
+}
+
+.dashboard-page .landlord-dashboard .dashboard-actions .btn {
+    display: flex;
+    min-width: 0;
+    min-height: 46px;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 12px;
+    line-height: 1.3;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.dashboard-page .landlord-dashboard .monthly-collection-bar,
+.dashboard-page .landlord-dashboard .countdown-banner {
+    margin: 0;
+}
+
+.dashboard-page .landlord-dashboard .countdown-banner {
+    grid-template-columns: minmax(0, 1fr) auto minmax(130px, auto);
+    gap: clamp(14px, 2vw, 24px);
+}
+
+.dashboard-page .landlord-dashboard .countdown-banner > div:first-child {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.dashboard-page .landlord-dashboard .overview-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+    gap: 14px;
+    margin: 0;
+}
+
+.dashboard-page .landlord-dashboard .overview-card {
+    min-height: 120px;
+    padding: 20px;
+}
+
+.dashboard-page .landlord-dashboard .destination-card,
+.dashboard-page .landlord-dashboard .tenant-directory,
+.dashboard-page .landlord-dashboard .landlord-property-card {
+    margin: 0;
+}
+
+.dashboard-page .landlord-dashboard .tenant-directory {
+    padding: clamp(18px, 2.5vw, 26px);
+}
+
+.dashboard-page .landlord-dashboard .tenant-list,
+.dashboard-page .landlord-dashboard .room-list {
+    display: grid;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.dashboard-page .landlord-dashboard .tenant-row {
+    min-width: 0;
+    gap: 14px;
+    padding: 16px 18px;
+}
+
+.dashboard-page .landlord-dashboard .tenant-row > div {
+    display: grid;
+    min-width: 0;
+    gap: 4px;
+}
+
+.dashboard-page .landlord-dashboard .tenant-row > b {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    text-align: right;
+}
+
+.dashboard-page .landlord-dashboard .section-heading {
+    align-items: center;
+    gap: 16px;
+    margin: 0;
+}
+
+.dashboard-page .landlord-dashboard .section-heading > div:first-child {
+    min-width: 0;
+}
+
+.dashboard-page .landlord-dashboard .section-heading h2 {
+    overflow-wrap: anywhere;
+}
+
+.dashboard-page .landlord-dashboard .section-heading > .section-actions,
+.dashboard-page .landlord-dashboard .portfolio-heading-actions {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.dashboard-page .landlord-dashboard .portfolio-tools {
+    grid-template-columns: minmax(220px, .8fr) minmax(0, 1.2fr);
+    align-items: end;
+    gap: 14px;
+    margin: 0;
+}
+
+.dashboard-page .landlord-dashboard .portfolio-search {
+    min-width: 0;
+}
+
+.dashboard-page .landlord-dashboard .room-filters {
+    min-width: 0;
+    gap: 8px;
+}
+
+.dashboard-page .landlord-dashboard .room-filter {
+    display: inline-flex;
+    min-width: 0;
+    min-height: 42px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 9px 12px;
+    line-height: 1.25;
+    white-space: normal;
+}
+
+.dashboard-page .landlord-dashboard .portfolio-results {
+    grid-column: 1 / -1;
+    min-height: 1.2em;
+}
+
+.dashboard-page .landlord-dashboard .property-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 18px;
+    padding-bottom: 18px;
+}
+
+.dashboard-page .landlord-dashboard .property-heading {
+    min-width: 0;
+}
+
+.dashboard-page .landlord-dashboard .property-heading h3 {
+    overflow-wrap: anywhere;
+}
+
+.dashboard-page .landlord-dashboard .property-actions {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.dashboard-page .landlord-dashboard .property-actions > *,
+.dashboard-page .landlord-dashboard .property-actions form {
+    min-width: 0;
+    margin: 0;
+}
+
+.dashboard-page .landlord-dashboard .property-actions .btn,
+.dashboard-page .landlord-dashboard .property-toggle {
+    max-width: 100%;
+    white-space: normal;
+}
+
+.dashboard-page .landlord-dashboard .room-row {
+    min-width: 0;
+}
+
+.dashboard-page .landlord-dashboard .room-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 165px), 1fr));
+    align-items: start;
+    gap: 16px;
+}
+
+.dashboard-page .landlord-dashboard .room-main,
+.dashboard-page .landlord-dashboard .room-status-block,
+.dashboard-page .landlord-dashboard .room-tenant-block,
+.dashboard-page .landlord-dashboard .room-billing-block,
+.dashboard-page .landlord-dashboard .room-payment-block {
+    min-width: 0;
+    flex: initial;
+    padding-left: 0;
+    border-left: 0;
+    overflow-wrap: anywhere;
+}
+
+.dashboard-page .landlord-dashboard .room-actions {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid #e6eeeb;
+}
+
+.dashboard-page .landlord-dashboard .room-quick-actions {
+    min-width: 0;
+    justify-content: flex-start;
+}
+
+.dashboard-page .landlord-dashboard .room-quick-actions > a,
+.dashboard-page .landlord-dashboard .room-quick-actions > form {
+    min-width: 0;
+}
+
+.dashboard-page .landlord-dashboard .room-quick-actions .btn {
+    white-space: normal;
+}
+
+.dashboard-page .landlord-dashboard .property-card > .section-heading {
+    margin-bottom: 16px;
+}
+
+.dashboard-page .landlord-dashboard .empty-state,
+.dashboard-page .landlord-dashboard .portfolio-empty {
+    margin: 0;
+    padding: 18px;
+    border: 1px dashed #d1e0db;
+    border-radius: 12px;
+    background: #f8fbfa;
+    color: #687b75;
+    text-align: center;
+}
+
+.dashboard-page .landlord-dashboard [hidden] {
+    display: none !important;
+}
+
+@media (max-width: 900px) {
+    .dashboard-page .landlord-dashboard .dashboard-header {
+        align-items: flex-start;
+    }
+
+    .dashboard-page .landlord-dashboard .countdown-banner {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .dashboard-page .landlord-dashboard .countdown-action {
+        grid-column: 1 / -1;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .dashboard-page .landlord-dashboard .portfolio-tools {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .dashboard-page .landlord-dashboard .property-header {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .dashboard-page .landlord-dashboard .property-actions {
+        justify-content: flex-start;
+    }
+}
+
+@media (max-width: 700px) {
+    .dashboard-page .landlord-dashboard {
+        gap: 18px;
+        padding: 14px;
+    }
+
+    .dashboard-page .landlord-dashboard .dashboard-header {
+        gap: 18px;
+        padding: 20px 18px;
+    }
+
+    .dashboard-page .landlord-dashboard .dashboard-header-actions {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 10px;
+    }
+
+    .dashboard-page .landlord-dashboard .overview-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .dashboard-page .landlord-dashboard .overview-card {
+        min-height: 104px;
+        padding: 16px;
+    }
+
+    .dashboard-page .landlord-dashboard .monthly-collection-bar {
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
+        padding: 18px;
+    }
+
+    .dashboard-page .landlord-dashboard .monthly-collection-bar strong {
+        text-align: right;
+        overflow-wrap: anywhere;
+    }
+
+    .dashboard-page .landlord-dashboard .countdown-banner {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 14px;
+        padding: 16px;
+    }
+
+    .dashboard-page .landlord-dashboard .countdown-action {
+        grid-column: auto;
+    }
+
+    .dashboard-page .landlord-dashboard .section-heading {
+        align-items: flex-start;
+    }
+
+    .dashboard-page .landlord-dashboard .section-heading > .section-actions,
+    .dashboard-page .landlord-dashboard .portfolio-heading-actions {
+        justify-content: flex-start;
+    }
+
+    .dashboard-page .landlord-dashboard .tenant-row {
+        align-items: flex-start;
+    }
+
+    .dashboard-page .landlord-dashboard .tenant-row > b {
+        text-align: left;
+    }
+
+    .dashboard-page .landlord-dashboard .room-details {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px 12px;
+    }
+
+    .dashboard-page .landlord-dashboard .room-actions {
+        align-items: stretch;
+    }
+
+    .dashboard-page .landlord-dashboard .room-quick-actions {
+        display: grid;
+        flex: 1 1 100%;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .dashboard-page .landlord-dashboard .room-quick-actions > a,
+    .dashboard-page .landlord-dashboard .room-quick-actions > form,
+    .dashboard-page .landlord-dashboard .room-quick-actions .btn {
+        width: 100%;
+    }
+
+    .dashboard-page .landlord-dashboard .room-quick-actions .btn {
+        min-height: 44px;
+        padding-inline: 8px;
+        line-height: 1.25;
+        text-align: center;
+    }
+}
+
+@media (max-width: 420px) {
+    .dashboard-page .landlord-dashboard .dashboard-actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        padding: 9px;
+    }
+
+    .dashboard-page .landlord-dashboard .dashboard-actions .btn {
+        padding: 9px 7px;
+        font-size: .78rem;
+    }
+
+    .dashboard-page .landlord-dashboard .overview-card {
+        padding: 13px 12px;
+    }
+
+    .dashboard-page .landlord-dashboard .room-details {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .dashboard-page .landlord-dashboard .room-quick-actions {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .dashboard-page .landlord-dashboard .destination-heading,
+    .dashboard-page .landlord-dashboard .destination-value {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .dashboard-page .landlord-dashboard .destination-value {
+        gap: 8px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dashboard-page .landlord-dashboard *,
+    .dashboard-page .landlord-dashboard *::before,
+    .dashboard-page .landlord-dashboard *::after {
+        scroll-behavior: auto !important;
+        animation-duration: .01ms !important;
+        transition-duration: .01ms !important;
+    }
+}
