@@ -7,25 +7,38 @@
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
 <body>
-<div class="container">
-    <h1>Assign Tenant to Room {{ room.room_number }}</h1>
-    <h1>Add New Tenant</h1>
-<form method="POST">
-    <input name="name" placeholder="Tenant Full Name" required>
-    <input name="email" type="email" placeholder="Tenant Email" required>
-    <button type="submit">Add Tenant</button>
-</form>
-    <form method="POST">
-        <select name="tenant_id" required>
-            <option value="">Select Tenant</option>
-            {% for t in tenants %}
-            <option value="{{ t.id }}">{{ t.email }}</option>
-            {% endfor %}
-        </select>
-        <label for="assigned_date">Room assignment date</label>
-        <input type="date" name="assigned_date" id="assigned_date" value="{{ today }}" required>
-        <button type="submit">Assign</button>
-    </form>
+<div class="container auth-shell">
+    <div class="auth-card">
+        <h1>Assign tenant to Room {{ room.room_number }}</h1>
+        <p class="muted">{{ room.property.name }}</p>
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash">{{ messages[0] }}</div>
+            {% endif %}
+        {% endwith %}
+
+        {% if tenants %}
+            <form method="POST">
+                <label for="tenant_id">Tenant</label>
+                <select name="tenant_id" id="tenant_id" required>
+                    <option value="">Select a tenant</option>
+                    {% for tenant in tenants %}
+                        <option value="{{ tenant.id }}">{{ tenant.name or tenant.email }} · {{ tenant.email }}</option>
+                    {% endfor %}
+                </select>
+                <label for="assigned_date">Room assignment date</label>
+                <input type="date" name="assigned_date" id="assigned_date" value="{{ today }}" required>
+                <button class="btn primary-action" type="submit">Assign tenant</button>
+            </form>
+        {% else %}
+            <p class="empty-state">No tenants are linked to your account yet. Add a tenant before assigning this room.</p>
+        {% endif %}
+
+        <div class="auth-links">
+            <a href="{{ url_for('add_tenant') }}">Add tenant</a>
+            <a href="{{ url_for('dashboard') }}">Back to dashboard</a>
+        </div>
+    </div>
 </div>
 </body>
 </html>

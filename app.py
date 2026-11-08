@@ -1419,6 +1419,9 @@ def assign_tenant(room_id):
         if not tenant:
             flash('Select a tenant linked to your account.')
             return render_template('assign_tenant.html', room=room, tenants=tenants, today=date.today().isoformat())
+        if Room.query.filter_by(tenant_id=tenant.id).first():
+            flash('This tenant already has an assigned room.')
+            return render_template('assign_tenant.html', room=room, tenants=tenants, today=date.today().isoformat())
         try:
             assigned_date = datetime.strptime(request.form.get('assigned_date', ''), '%Y-%m-%d').date()
         except (TypeError, ValueError):
