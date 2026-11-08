@@ -378,6 +378,17 @@ input, select {
     box-shadow: 0 8px 18px rgba(33, 92, 84, 0.12);
 }
 .section-heading { margin: 8px 0 14px; }
+.maintenance-requests-shell { max-width: 860px; }
+.maintenance-form-card, .maintenance-request-list { margin: 20px 0; }
+.maintenance-request-form, .maintenance-status-form { display: grid; gap: 8px; margin-top: 16px; }
+.maintenance-request-form label, .maintenance-status-form label { font: 700 0.9rem Arial, sans-serif; }
+.maintenance-request-form textarea { width: 100%; padding: 10px; border: 1px solid rgba(208, 200, 170, 0.24); border-radius: 8px; box-sizing: border-box; background: rgba(23, 31, 30, 0.9); color: #eef3f2; font: 0.95rem Arial, sans-serif; resize: vertical; }
+.maintenance-request-form button, .maintenance-status-form button { justify-self: start; }
+.maintenance-request-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.maintenance-request-description { white-space: pre-wrap; line-height: 1.55; }
+.maintenance-status-form { grid-template-columns: minmax(140px, 1fr) auto; align-items: end; }
+.maintenance-status-form label { grid-column: 1 / -1; }
+.maintenance-status-form select { margin: 0; }
 .count-badge { background: #e8d7c8; color: #7d4827; padding: 7px 10px; border-radius: 20px; font: 700 0.78rem Arial, sans-serif; }
 .property-header {
     align-items: center;

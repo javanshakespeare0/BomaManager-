@@ -32,6 +32,7 @@
             <a href="{{ url_for('add_tenant') }}" class="btn secondary-action">Add tenant</a>
             <a href="{{ url_for('subscription_page') }}" class="btn secondary-action">Subscription</a>
             <a href="{{ url_for('payment_history') }}" class="btn secondary-action">Payment history</a>
+            <a href="{{ url_for('maintenance_requests') }}" class="btn secondary-action">Maintenance</a>
             <a href="{{ url_for('update_contact') }}" class="btn secondary-action">Update contact</a>
             <a href="{{ url_for('settings') }}" class="btn secondary-action">Payment destination</a>
         </nav>
@@ -327,6 +328,7 @@
     {% else %}
         <h2>Tenant Dashboard</h2>
         <p><a class="btn secondary-action" href="{{ url_for('update_contact') }}">Update my contact number</a></p>
+        <p><a class="btn secondary-action" href="{{ url_for('maintenance_requests') }}">Maintenance requests</a></p>
         {% if landlord %}
             <div class="property-card">
                 <h3>Contact your landlord</h3>

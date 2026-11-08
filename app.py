@@ -230,6 +230,18 @@ class RoomRequest(db.Model):
     tenant = db.relationship('User', backref='room_requests', foreign_keys=[tenant_id])
     __table_args__ = (db.UniqueConstraint('room_id', 'tenant_id', name='unique_room_request_per_tenant'),)
 
+class MaintenanceRequest(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(120), nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='open')
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
+    tenant_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    room = db.relationship('Room', backref='maintenance_requests')
+    tenant = db.relationship('User', backref='maintenance_requests', foreign_keys=[tenant_id])
+
 def reject_pending_room_requests(room_id=None, tenant_id=None, except_request_id=None):
     filters = [RoomRequest.status == 'pending']
     criteria = []
@@ -902,6 +914,74 @@ def dashboard():
         room_request_by_room=room_request_by_room,
         room_request_counts=room_request_counts,
         my_room_requests=my_room_requests,
+    )
+
+@app.route('/maintenance-requests', methods=['GET', 'POST'])
+@login_required
+def maintenance_requests():
+    if current_user.role == 'tenant':
+        if request.method == 'POST' and 'request_id' in request.form:
+            return "Access Denied", 403
+        room = Room.query.filter_by(tenant_id=current_user.id).first()
+        if request.method == 'POST':
+            title = request.form.get('title', '').strip()
+            description = request.form.get('description', '').strip()
+            if not room:
+                flash('You need an assigned room to report a maintenance issue.', 'warning')
+            elif not title or len(title) > 120 or not description or len(description) > 2000:
+                flash('Enter a title (up to 120 characters) and description (up to 2,000 characters).', 'warning')
+            else:
+                maintenance_request = MaintenanceRequest(
+                    title=title,
+                    description=description,
+                    room_id=room.id,
+                    tenant_id=current_user.id,
+                )
+                db.session.add(maintenance_request)
+                db.session.commit()
+                flash('Your maintenance request has been sent to your landlord.', 'success')
+                return redirect(url_for('maintenance_requests'))
+        requests_list = MaintenanceRequest.query.filter_by(
+            tenant_id=current_user.id,
+        ).order_by(MaintenanceRequest.created_at.desc()).all()
+        return render_template(
+            'maintenance_requests.html',
+            room=room,
+            maintenance_requests=requests_list,
+            statuses=None,
+        )
+
+    if current_user.role != 'landlord':
+        return "Access Denied", 403
+
+    if request.method == 'POST':
+        maintenance_request = MaintenanceRequest.query.join(Room).join(Property).filter(
+            MaintenanceRequest.id == request.form.get('request_id'),
+            Property.landlord_id == current_user.id,
+        ).first_or_404()
+        status = request.form.get('status', '')
+        if status not in {'open', 'in_progress', 'resolved'}:
+            flash('Choose a valid maintenance status.', 'warning')
+        else:
+            maintenance_request.status = status
+            db.session.commit()
+            flash('Maintenance request status updated.', 'success')
+        return redirect(url_for('maintenance_requests'))
+
+    requests_list = MaintenanceRequest.query.join(Room).join(Property).filter(
+        Property.landlord_id == current_user.id,
+    ).order_by(
+        MaintenanceRequest.created_at.desc(),
+    ).all()
+    return render_template(
+        'maintenance_requests.html',
+        room=None,
+        maintenance_requests=requests_list,
+        statuses=[
+            ('open', 'Open'),
+            ('in_progress', 'In progress'),
+            ('resolved', 'Resolved'),
+        ],
     )
 
 @app.route('/rooms/<int:room_id>/request', methods=['POST'])

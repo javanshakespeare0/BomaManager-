@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Maintenance Requests - BomaManager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+<body>
+<main class="container maintenance-requests-shell">
+    <header class="section-heading">
+        <p class="eyebrow">Property care</p>
+        <h1>Maintenance requests</h1>
+        <p class="muted">
+            {% if current_user.role == 'tenant' %}
+                Report an issue in your room and follow its progress.
+            {% else %}
+                Review tenant issues and update their status.
+            {% endif %}
+        </p>
+    </header>
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    {% if current_user.role == 'tenant' and room %}
+        <section class="property-card maintenance-form-card">
+            <h2>Report an issue</h2>
+            <p class="muted">{{ room.property.name }} · Room {{ room.room_number }}</p>
+            <form method="POST" class="maintenance-request-form">
+                <label for="title">Issue</label>
+                <input id="title" name="title" maxlength="120" required placeholder="e.g. Leaking kitchen tap">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" maxlength="2000" rows="5" required placeholder="Describe the issue and where it is happening"></textarea>
+                <button class="btn primary-action" type="submit">Send request</button>
+            </form>
+        </section>
+    {% elif current_user.role == 'tenant' %}
+        <p class="empty-state">You need an assigned room before you can report a maintenance issue.</p>
+    {% endif %}
+
+    <section class="maintenance-request-list">
+        <h2>{% if current_user.role == 'tenant' %}Your reports{% else %}Tenant reports{% endif %}</h2>
+        {% if maintenance_requests %}
+            {% for item in maintenance_requests %}
+                <article class="property-card maintenance-request-card">
+                    <div class="maintenance-request-heading">
+                        <div>
+                            <h3>{{ item.title }}</h3>
+                            <p class="muted">{{ item.room.property.name }} · Room {{ item.room.room_number }} · Reported {{ item.created_at.strftime('%d %b %Y at %H:%M') }}</p>
+                            {% if current_user.role == 'landlord' %}
+                                <p class="muted">Tenant: {{ item.tenant.name or item.tenant.email }}</p>
+                            {% endif %}
+                        </div>
+                        <span class="count-badge">{{ item.status.replace('_', ' ')|title }}</span>
+                    </div>
+                    <p class="maintenance-request-description">{{ item.description }}</p>
+                    {% if current_user.role == 'landlord' %}
+                        <form method="POST" class="maintenance-status-form">
+                            <input type="hidden" name="request_id" value="{{ item.id }}">
+                            <label for="status-{{ item.id }}">Update status</label>
+                            <select id="status-{{ item.id }}" name="status">
+                                {% for value, label in statuses %}
+                                    <option value="{{ value }}" {% if item.status == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            <button class="btn secondary-action" type="submit">Save status</button>
+                        </form>
+                    {% endif %}
+                </article>
+            {% endfor %}
+        {% else %}
+            <p class="empty-state">No maintenance requests yet.</p>
+        {% endif %}
+    </section>
+    <p><a href="{{ url_for('dashboard') }}">Back to dashboard</a></p>
+</main>
+</body>
+</html>
