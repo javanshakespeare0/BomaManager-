@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% include '_favicon.html' %}
+    <title>My Properties - BomaManager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+<body class="my-properties-page">
+<main class="container my-properties-shell">
+    {% include '_app_navigation.html' %}
+    <header class="my-properties-header">
+        <div>
+            <p class="eyebrow">Portfolio workspace</p>
+            <h1>My Properties</h1>
+            <p class="muted">
+                {% if active_group %}
+                    Properties and room activity in {{ active_group.label }}.
+                {% else %}
+                    Choose a location to review its properties, rooms, and payments.
+                {% endif %}
+            </p>
+        </div>
+        {% if active_group %}
+            <a class="btn secondary-action" href="{{ url_for('my_properties') }}">All locations</a>
+        {% else %}
+            <a class="btn secondary-action" href="{{ url_for('dashboard') }}">Back to overview</a>
+        {% endif %}
+    </header>
+
+    {% with messages = get_flashed_messages() %}
+        {% if messages %}
+            {% for message in messages %}<div class="flash">{{ message }}</div>{% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    {% if not active_group %}
+        <section class="location-grid" aria-label="Property locations">
+            {% for group in location_groups %}
+                <a class="location-card" href="{{ url_for('my_properties', location=group.location) }}">
+                    <span class="location-card-label">Property location</span>
+                    <strong>{{ group.label }}</strong>
+                    <span class="location-card-meta">
+                        {{ group.property_count }} {{ 'property' if group.property_count == 1 else 'properties' }}
+                        · {{ group.room_count }} {{ 'room' if group.room_count == 1 else 'rooms' }}
+                    </span>
+                    <span class="location-card-stats">
+                        <span>{{ group.occupied_count }} occupied</span>
+                        <span>{{ group.vacant_count }} vacant</span>
+                        <span>{{ group.paid_count }} paid</span>
+                    </span>
+                    <span class="location-card-open">View location <span aria-hidden="true">→</span></span>
+                </a>
+            {% else %}
+                <div class="my-properties-empty">
+                    <strong>No properties yet</strong>
+                    <p>Add your first property to see its rooms and payment status here.</p>
+                    <a class="btn primary-action" href="{{ url_for('add_property') }}">Add property</a>
+                </div>
+            {% endfor %}
+        </section>
+    {% else %}
+        <section class="location-summary-grid" aria-label="Location summary">
+            <article><span>Properties</span><strong>{{ active_group.property_count }}</strong></article>
+            <article><span>Total rooms</span><strong>{{ active_group.room_count }}</strong></article>
+            <article><span>Occupied / vacant</span><strong>{{ active_group.occupied_count }} / {{ active_group.vacant_count }}</strong></article>
+            <article><span>Paid rooms</span><strong>{{ active_group.paid_count }}</strong></article>
+            <article><span>Outstanding balance</span><strong>Ksh {{ '%.2f'|format(active_group.outstanding_total) }}</strong></article>
+        </section>
+
+        <div class="location-property-list">
+            {% for prop in selected_properties %}
+                <section class="location-property-card">
+                    <header class="location-property-header">
+                        <div>
+                            <p class="eyebrow">{{ prop.location or 'Location not set' }}</p>
+                            <h2>{{ prop.name }}</h2>
+                            <p class="muted">{{ prop.rooms|length }} {{ 'room' if prop.rooms|length == 1 else 'rooms' }}</p>
+                        </div>
+                        <div class="location-property-actions">
+                            <a class="btn secondary-action" href="{{ url_for('edit_property', prop_id=prop.id) }}">Edit property</a>
+                            <a class="btn primary-action" href="{{ url_for('add_room', prop_id=prop.id) }}">Add room</a>
+                        </div>
+                    </header>
+
+                    {% if prop.rooms %}
+                        <div class="location-room-list">
+                            {% for room in prop.rooms|sort(attribute='room_number') %}
+                                {% set detail = room_details[room.id] %}
+                                {% set payment = detail.summary %}
+                                {% set is_occupied = room.tenant is not none %}
+                                <article class="location-room-card">
+                                    <div class="location-room-main">
+                                        <div class="location-room-title">
+                                            <div>
+                                                <h3>Room {{ room.room_number }}</h3>
+                                                <span class="location-room-rent">Ksh {{ '%.2f'|format(room.rent_amount) }} rent</span>
+                                            </div>
+                                            {% if not is_occupied %}
+                                                <span class="location-room-status status-vacant">Vacant</span>
+                                            {% elif detail.is_paid %}
+                                                <span class="location-room-status status-paid">Paid</span>
+                                            {% elif not detail.period %}
+                                                <span class="location-room-status status-setup">Needs setup</span>
+                                            {% else %}
+                                                <span class="location-room-status status-due">Balance due</span>
+                                            {% endif %}
+                                        </div>
+
+                                        {% if is_occupied %}
+                                            <div class="location-room-tenant">
+                                                <strong>{{ room.tenant.name or room.tenant.email }}</strong>
+                                                <span>{{ room.tenant.contact_number or room.tenant.email }}</span>
+                                            </div>
+                                            {% if detail.period and payment %}
+                                                <div class="location-room-payment">
+                                                    <span>Period <strong>{{ detail.period.label }}</strong></span>
+                                                    <span>Rent <strong>Ksh {{ '%.2f'|format(room.rent_amount) }}</strong></span>
+                                                    <span>Water <strong>Ksh {{ '%.2f'|format(payment.water_bill.amount if payment.water_bill else 0) }}</strong></span>
+                                                    <span>Other bills <strong>Ksh {{ '%.2f'|format(payment.pending_total) }}</strong></span>
+                                                    <span>Paid <strong>Ksh {{ '%.2f'|format(payment.total_paid) }}</strong></span>
+                                                    <span>Balance <strong>Ksh {{ '%.2f'|format(payment.balance) }}</strong></span>
+                                                </div>
+                                            {% else %}
+                                                <p class="muted">Set an assignment date to start tracking this tenant's payments.</p>
+                                            {% endif %}
+                                        {% else %}
+                                            <p class="muted">No tenant assigned to this room.</p>
+                                        {% endif %}
+                                    </div>
+
+                                    <div class="location-room-actions">
+                                        <a class="btn secondary-action" href="{{ url_for('edit_room', room_id=room.id) }}">Edit rent</a>
+                                        {% if is_occupied %}
+                                            {% set return_to = url_for('my_properties', location=selected_location) %}
+                                            <a class="btn secondary-action" href="{{ url_for('update_assignment_date', room_id=room.id) }}">Update assignment date</a>
+                                            {% if detail.period and payment %}
+                                                <a class="btn secondary-action" href="{{ url_for('water_bill', room_id=room.id, return_to=return_to) }}">{{ 'Edit water bill' if detail.water_bill else 'Add water bill' }}</a>
+                                                <a class="btn secondary-action" href="{{ url_for('pending_bill', room_id=room.id, return_to=return_to) }}">Manage other bills</a>
+                                                {% if payment.balance <= 0 %}
+                                                    <form method="POST" action="{{ url_for('mark_rent_unpaid', room_id=room.id) }}" onsubmit="return confirm('Mark Room {{ room.room_number }} as unpaid for this period?');">
+                                                        <input type="hidden" name="return_to" value="{{ return_to }}">
+                                                        <button class="btn secondary-action" type="submit">Mark unpaid</button>
+                                                    </form>
+                                                {% else %}
+                                                    <form method="POST" action="{{ url_for('mark_rent_paid', room_id=room.id) }}" onsubmit="return confirm('Record the remaining balance as paid for Room {{ room.room_number }}?');">
+                                                        <input type="hidden" name="return_to" value="{{ return_to }}">
+                                                        <button class="btn primary-action" type="submit">Mark paid</button>
+                                                    </form>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="location-room-setup-note">Set an assignment date to edit this room's current bill.</span>
+                                            {% endif %}
+                                            <a class="btn btn-danger" href="{{ url_for('vacate_room', room_id=room.id) }}" onclick="return confirm('Vacate Room {{ room.room_number }} and remove its tenant assignment?');">Vacate</a>
+                                        {% else %}
+                                            <a class="btn primary-action" href="{{ url_for('assign_tenant', room_id=room.id) }}">Assign tenant</a>
+                                        {% endif %}
+                                    </div>
+                                </article>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="my-properties-empty">No rooms have been added to this property yet.</p>
+                    {% endif %}
+                </section>
+            {% endfor %}
+        </div>
+    {% endif %}
+</main>
+</body>
+</html>

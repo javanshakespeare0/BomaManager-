@@ -1685,6 +1685,16 @@ html[data-theme="contrast"] .payment-record {
     text-align: right;
 }
 
+.dashboard-page .landlord-dashboard .tenant-room-number {
+    color: #24574e;
+    font: 700 .8rem/1.4 "Segoe UI", Arial, sans-serif;
+}
+
+.dashboard-page .landlord-dashboard .tenant-room-unassigned {
+    color: #71827e;
+    font-weight: 500;
+}
+
 .dashboard-page .landlord-dashboard .section-heading {
     align-items: center;
     gap: 16px;
@@ -3209,5 +3219,374 @@ html[data-theme="dark"] .maintenance-form-card {
     .maintenance-form-card,
     .maintenance-request-list {
         padding: 15px 13px;
+    }
+}
+
+.my-properties-shell {
+    width: min(100%, 1320px);
+}
+
+.my-properties-header,
+.location-property-header {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+}
+
+.my-properties-header {
+    margin: 0 0 22px;
+}
+
+.my-properties-header .muted {
+    max-width: 65ch;
+    line-height: 1.5;
+}
+
+.location-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+    gap: 16px;
+}
+
+.location-card,
+.location-property-card,
+.location-summary-grid article,
+.location-room-card {
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface);
+    box-shadow: 0 8px 24px rgba(22, 52, 45, .05);
+}
+
+.location-card {
+    display: grid;
+    gap: 12px;
+    padding: 20px;
+    color: var(--text);
+    text-decoration: none;
+    transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+
+.location-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+    box-shadow: 0 14px 28px rgba(22, 52, 45, .1);
+    text-decoration: none;
+}
+
+.location-card-label,
+.location-summary-grid article > span {
+    color: var(--text-muted);
+    font: 700 .72rem/1.3 "Segoe UI", Arial, sans-serif;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.location-card > strong {
+    color: var(--text);
+    font-size: 1.25rem;
+    overflow-wrap: anywhere;
+}
+
+.location-card-meta {
+    color: var(--text-muted);
+    font: .86rem/1.4 "Segoe UI", Arial, sans-serif;
+}
+
+.location-card-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+
+.location-card-stats span,
+.location-room-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 9px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface-raised);
+    color: var(--text-muted);
+    font: 700 .72rem/1.2 "Segoe UI", Arial, sans-serif;
+}
+
+.location-card-open {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 3px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    color: var(--accent-strong);
+    font: 700 .84rem "Segoe UI", Arial, sans-serif;
+}
+
+.location-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 175px), 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.location-summary-grid article {
+    display: grid;
+    min-height: 96px;
+    align-content: center;
+    gap: 9px;
+    padding: 16px;
+}
+
+.location-summary-grid article strong {
+    color: var(--text);
+    font-size: 1.2rem;
+    overflow-wrap: anywhere;
+}
+
+.location-property-list,
+.location-room-list {
+    display: grid;
+    min-width: 0;
+    gap: 16px;
+}
+
+.location-property-card {
+    padding: clamp(16px, 2.5vw, 24px);
+}
+
+.location-property-header {
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.location-property-header .eyebrow {
+    margin-bottom: 5px;
+}
+
+.location-property-header h2 {
+    color: var(--text);
+    overflow-wrap: anywhere;
+}
+
+.location-property-header .muted {
+    margin-top: 5px;
+}
+
+.location-property-actions,
+.location-room-actions {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.location-property-actions .btn,
+.location-room-actions .btn {
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    white-space: normal;
+}
+
+.location-room-list {
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.location-room-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(150px, auto);
+    align-items: start;
+    gap: 18px;
+    padding: 16px;
+    background: var(--surface-raised);
+    box-shadow: none;
+}
+
+.location-room-main {
+    display: grid;
+    min-width: 0;
+    gap: 12px;
+}
+
+.location-room-title,
+.location-room-title > div {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 10px;
+}
+
+.location-room-title {
+    justify-content: space-between;
+}
+
+.location-room-title h3 {
+    color: var(--text);
+}
+
+.location-room-rent,
+.location-room-tenant > span {
+    color: var(--text-muted);
+    font: .82rem/1.4 "Segoe UI", Arial, sans-serif;
+}
+
+.location-room-tenant {
+    display: grid;
+    gap: 3px;
+}
+
+.location-room-tenant strong {
+    color: var(--text);
+    overflow-wrap: anywhere;
+}
+
+.location-room-tenant > span {
+    overflow-wrap: anywhere;
+}
+
+.location-room-payment {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr));
+    gap: 8px;
+}
+
+.location-room-payment > span {
+    display: grid;
+    min-width: 0;
+    gap: 4px;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--surface);
+    color: var(--text-muted);
+    font: .72rem/1.3 "Segoe UI", Arial, sans-serif;
+}
+
+.location-room-payment strong {
+    color: var(--text);
+    font-size: .82rem;
+    overflow-wrap: anywhere;
+}
+
+.location-room-actions {
+    justify-content: flex-end;
+}
+
+.location-room-actions form {
+    min-width: 0;
+    margin: 0;
+}
+
+.location-room-actions .status-paid,
+.location-card-stats .status-paid {
+    color: #21694c;
+}
+
+.location-room-status.status-paid {
+    border-color: #b7dfcb;
+    background: #e7f5ee;
+    color: #21694c;
+}
+
+.location-room-status.status-due {
+    border-color: #f0d7b4;
+    background: #fff5e8;
+    color: #8a5b1d;
+}
+
+.location-room-status.status-vacant {
+    background: var(--surface-raised);
+}
+
+.location-room-status.status-setup {
+    border-color: #e6ddc8;
+    background: #faf6ea;
+    color: #80652f;
+}
+
+.location-room-setup-note {
+    align-self: center;
+    color: var(--text-muted);
+    font: .78rem/1.45 "Segoe UI", Arial, sans-serif;
+}
+
+.my-properties-empty {
+    grid-column: 1 / -1;
+    padding: 26px;
+    border: 1px dashed var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.my-properties-empty strong {
+    color: var(--text);
+    font-size: 1.1rem;
+}
+
+@media (max-width: 760px) {
+    .location-room-card {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .location-room-actions {
+        justify-content: flex-start;
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+    }
+}
+
+@media (max-width: 600px) {
+    .my-properties-header,
+    .location-property-header {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .my-properties-header > .btn,
+    .location-property-actions > .btn {
+        width: 100%;
+    }
+
+    .location-property-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .location-room-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .location-room-actions > *,
+    .location-room-actions form,
+    .location-room-actions .btn {
+        width: 100%;
+        min-width: 0;
+    }
+}
+
+@media (max-width: 380px) {
+    .location-card,
+    .location-property-card {
+        padding: 14px;
+    }
+
+    .location-property-actions,
+    .location-room-actions {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .location-room-title {
+        align-items: flex-start;
+        flex-direction: column;
     }
 }

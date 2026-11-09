@@ -20,7 +20,7 @@ try:
     import requests
     from sqlalchemy import inspect, or_
     from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-    from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_from_directory
+    from flask import Flask, abort, render_template, request, redirect, url_for, flash, jsonify, session, send_from_directory
     from flask_sqlalchemy import SQLAlchemy
     from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
     from flask_bcrypt import Bcrypt
@@ -1073,6 +1073,79 @@ def dashboard():
         my_room_requests=my_room_requests,
     )
 
+@app.route('/my-properties')
+@login_required
+@subscription_required
+def my_properties():
+    if current_user.role != 'landlord':
+        return "Access Denied", 403
+
+    properties = Property.query.filter_by(
+        landlord_id=current_user.id,
+    ).order_by(Property.location.asc(), Property.name.asc()).all()
+    has_location = 'location' in request.args
+    selected_location = request.args.get('location', '')
+    location_groups = {}
+    room_details = {}
+
+    for prop in properties:
+        location_key = prop.location or ''
+        group = location_groups.setdefault(location_key, {
+            'location': location_key,
+            'label': location_key or 'Location not set',
+            'property_count': 0,
+            'room_count': 0,
+            'occupied_count': 0,
+            'vacant_count': 0,
+            'paid_count': 0,
+            'outstanding_total': 0,
+        })
+        group['property_count'] += 1
+        for room in prop.rooms:
+            period = get_billing_period(room) if room.tenant else None
+            summary = get_payment_summary(room, period['key']) if period else None
+            is_occupied = bool(room.tenant)
+            is_paid = bool(summary and summary['balance'] <= 0)
+            group['room_count'] += 1
+            if is_occupied:
+                group['occupied_count'] += 1
+                if is_paid:
+                    group['paid_count'] += 1
+                elif summary:
+                    group['outstanding_total'] += summary['balance']
+            else:
+                group['vacant_count'] += 1
+            room_details[room.id] = {
+                'period': period,
+                'summary': summary,
+                'is_paid': is_paid,
+                'water_bill': summary['water_bill'] if summary else None,
+            }
+
+    if has_location:
+        selected_properties = [
+            prop for prop in properties
+            if (prop.location or '') == selected_location
+        ]
+        if not selected_properties:
+            abort(404)
+        active_group = location_groups[selected_location]
+    else:
+        selected_properties = []
+        active_group = None
+
+    return render_template(
+        'my_properties.html',
+        location_groups=sorted(
+            location_groups.values(),
+            key=lambda group: group['label'].casefold(),
+        ),
+        selected_location=selected_location,
+        active_group=active_group,
+        selected_properties=selected_properties,
+        room_details=room_details,
+    )
+
 @app.route('/maintenance-requests', methods=['GET', 'POST'])
 @login_required
 def maintenance_requests():
@@ -1782,6 +1855,14 @@ def add_tenant():
 
     return render_template('add_tenant.html')
 
+def property_page_return_url(room):
+    return_to = request.values.get('return_to')
+    expected_return = url_for('my_properties', location=room.property.location or '')
+    return expected_return if return_to == expected_return else url_for('dashboard')
+
+def redirect_after_property_payment(room):
+    return redirect(property_page_return_url(room))
+
 @app.route('/mark_rent_paid/<int:room_id>', methods=['POST'])
 @login_required
 @subscription_required
@@ -1814,7 +1895,7 @@ def mark_rent_paid(room_id):
         flash(f'Room {room.room_number} marked as paid for {current_period["label"]}.')
     else:
         flash(f'Room {room.room_number} is already marked as paid for {current_period["label"]}.')
-    return redirect(url_for('dashboard'))
+    return redirect_after_property_payment(room)
 
 @app.route('/mark_rent_unpaid/<int:room_id>', methods=['POST'])
 @login_required
@@ -1839,7 +1920,7 @@ def mark_rent_unpaid(room_id):
         db.session.delete(payment)
     db.session.commit()
     flash(f'Room {room.room_number} marked as not yet paid for {current_period["label"]}.')
-    return redirect(url_for('dashboard'))
+    return redirect_after_property_payment(room)
 
 #... rest of your property / room / mpesa routes stay same...
 @app.route('/add_property', methods=['GET', 'POST'])
@@ -2041,7 +2122,13 @@ def water_bill(room_id):
         rate_per_unit = float(request.form['rate_per_unit'])
         if units_used < 0 or rate_per_unit < 0:
             flash('Water units and rate cannot be negative.')
-            return render_template('water_bill.html', room=room, bill=bill, current_period=current_period)
+            return render_template(
+                'water_bill.html',
+                room=room,
+                bill=bill,
+                current_period=current_period,
+                return_url=property_page_return_url(room),
+            )
         if bill:
             bill.units_used = units_used
             bill.rate_per_unit = rate_per_unit
@@ -2059,8 +2146,14 @@ def water_bill(room_id):
             db.session.add(bill)
         db.session.commit()
         flash('Water bill saved!')
-        return redirect(url_for('dashboard'))
-    return render_template('water_bill.html', room=room, bill=bill, current_period=current_period)
+        return redirect_after_property_payment(room)
+    return render_template(
+        'water_bill.html',
+        room=room,
+        bill=bill,
+        current_period=current_period,
+        return_url=property_page_return_url(room),
+    )
 
 @app.route('/pending_bill/<int:room_id>', methods=['GET', 'POST'])
 @login_required
@@ -2091,10 +2184,22 @@ def pending_bill(room_id):
             amount_value = float(amount)
         except (TypeError, ValueError):
             flash('Enter a valid amount for the pending bill.')
-            return render_template('pending_bill.html', room=room, bill=bill, current_period=current_period)
+            return render_template(
+                'pending_bill.html',
+                room=room,
+                bill=bill,
+                current_period=current_period,
+                return_url=property_page_return_url(room),
+            )
         if amount_value < 0:
             flash('Pending bills cannot be negative.')
-            return render_template('pending_bill.html', room=room, bill=bill, current_period=current_period)
+            return render_template(
+                'pending_bill.html',
+                room=room,
+                bill=bill,
+                current_period=current_period,
+                return_url=property_page_return_url(room),
+            )
 
         if bill:
             bill.title = title
@@ -2113,9 +2218,15 @@ def pending_bill(room_id):
             db.session.add(bill)
         db.session.commit()
         flash('Pending bill saved successfully.')
-        return redirect(url_for('dashboard'))
+        return redirect_after_property_payment(room)
 
-    return render_template('pending_bill.html', room=room, bill=bill, current_period=current_period)
+    return render_template(
+        'pending_bill.html',
+        room=room,
+        bill=bill,
+        current_period=current_period,
+        return_url=property_page_return_url(room),
+    )
 
 @app.route('/assign_tenant/<int:room_id>', methods=['GET', 'POST'])
 @login_required

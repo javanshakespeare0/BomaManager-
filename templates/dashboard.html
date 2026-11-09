@@ -225,6 +225,11 @@
                             <div>
                                 <strong>{{ tenant.name or tenant.email }}</strong>
                                 <span>{{ tenant.email }}</span>
+                                {% if tenant.room %}
+                                    <span class="tenant-room-number">Room {{ tenant.room[0].room_number }} · {{ tenant.room[0].property.name }}</span>
+                                {% else %}
+                                    <span class="tenant-room-number tenant-room-unassigned">No room assigned</span>
+                                {% endif %}
                             </div>
                             <b>{{ tenant.contact_number or 'No contact number' }}</b>
                         </div>

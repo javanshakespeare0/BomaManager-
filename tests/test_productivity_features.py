@@ -14,9 +14,11 @@ from app import (
     Payment,
     PaymentReminder,
     Property,
+    PendingBill,
     Room,
     RoomRequest,
     User,
+    WaterBill,
     app,
     db,
 )
@@ -123,6 +125,7 @@ class ProductivityFeatureTests(unittest.TestCase):
         self.assertIn(b'Needs attention', response.data)
         self.assertIn(b'Copy reminder', response.data)
         self.assertIn(b'urgent', response.data)
+        self.assertIn(b'class="tenant-room-number">Room 101', response.data)
         self.assertIn(b'/reports', response.data)
         self.assertIn(b'Room application', response.data)
         self.assertIn(b'Vacant room', response.data)
@@ -130,6 +133,89 @@ class ProductivityFeatureTests(unittest.TestCase):
         self.assertIn(f'/assign_tenant/{vacant_room_id}'.encode(), response.data)
         self.assertIn(b'Approve this application and assign the room', response.data)
         self.assertLess(response.data.index(b'Urgent leak'), response.data.index(b'Applicant Two'))
+
+    def test_my_properties_groups_locations_and_updates_room_payment_in_place(self):
+        with app.app_context():
+            second_property = Property(
+                name='Riverside Apartments',
+                location='Riverside',
+                landlord_id=self.landlord_id,
+            )
+            db.session.add(second_property)
+            db.session.flush()
+            vacant_room = Room(
+                room_number='A2',
+                room_type='Bedsitter',
+                rent_amount=8000,
+                property_id=second_property.id,
+                is_occupied=False,
+            )
+            db.session.add(vacant_room)
+            db.session.commit()
+            vacant_room_id = vacant_room.id
+        self.login_as(self.landlord_id)
+
+        locations_page = self.client.get('/my-properties')
+        location_page = self.client.get('/my-properties?location=Test+Location')
+
+        self.assertEqual(locations_page.status_code, 200)
+        self.assertIn(b'Test Location', locations_page.data)
+        self.assertIn(b'Riverside', locations_page.data)
+        self.assertEqual(location_page.status_code, 200)
+        self.assertIn(b'Test Property', location_page.data)
+        self.assertIn(b'Room 101', location_page.data)
+        self.assertIn(b'Tenant One', location_page.data)
+        self.assertIn(b'Balance due', location_page.data)
+        self.assertIn(b'Manage other bills', location_page.data)
+        self.assertIn(b'/mark_rent_paid/', location_page.data)
+        self.assertNotIn(b'Riverside Apartments', location_page.data)
+
+        paid_response = self.client.post(
+            f'/mark_rent_paid/{self.room_id}',
+            data={'return_to': '/my-properties?location=Test+Location'},
+        )
+
+        self.assertEqual(paid_response.status_code, 302)
+        self.assertEqual(paid_response.location, '/my-properties?location=Test+Location')
+        with app.app_context():
+            payment = Payment.query.filter_by(room_id=self.room_id).one()
+            self.assertEqual(payment.amount, 10000)
+
+        return_query = 'return_to=%2Fmy-properties%3Flocation%3DTest%2BLocation'
+        pending_bill_url = f'/pending_bill/{self.room_id}?{return_query}'
+        pending_page = self.client.get(pending_bill_url)
+        self.assertIn(b'href="/my-properties?location=Test+Location"', pending_page.data)
+        self.assertIn(b'Back to properties', pending_page.data)
+        pending_response = self.client.post(
+            pending_bill_url,
+            data={'title': 'Cleaning', 'amount': '500', 'note': 'Monthly cleaning'},
+        )
+        self.assertEqual(pending_response.location, '/my-properties?location=Test+Location')
+        with app.app_context():
+            pending_bill = PendingBill.query.filter_by(room_id=self.room_id).one()
+            self.assertEqual(pending_bill.amount, 500)
+
+        water_bill_url = f'/water_bill/{self.room_id}?{return_query}'
+        water_response = self.client.post(
+            water_bill_url,
+            data={'units_used': '3', 'rate_per_unit': '100'},
+        )
+        self.assertEqual(water_response.location, '/my-properties?location=Test+Location')
+        with app.app_context():
+            water_bill = WaterBill.query.filter_by(room_id=self.room_id).one()
+            self.assertEqual(water_bill.amount, 300)
+
+        vacant_location_page = self.client.get('/my-properties?location=Riverside')
+        self.assertEqual(vacant_location_page.status_code, 200)
+        self.assertIn(f'/assign_tenant/{vacant_room_id}'.encode(), vacant_location_page.data)
+        self.assertIn(b'Vacant', vacant_location_page.data)
+
+    def test_tenants_cannot_open_landlord_property_workspace(self):
+        self.login_as(self.tenant_id)
+
+        response = self.client.get('/my-properties')
+
+        self.assertEqual(response.status_code, 403)
 
     def test_landlord_can_log_manual_payment_reminder(self):
         self.login_as(self.landlord_id)

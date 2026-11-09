@@ -6,6 +6,7 @@
     </a>
     <div class="app-navigation-links">
         <a href="{{ url_for('dashboard') }}" {% if request.endpoint == 'dashboard' %}aria-current="page"{% endif %}>Overview</a>
+        <a href="{{ url_for('my_properties') }}" {% if request.endpoint == 'my_properties' %}aria-current="page"{% endif %}>My Properties</a>
         <a href="{{ url_for('landlord_reports') }}" {% if request.endpoint == 'landlord_reports' %}aria-current="page"{% endif %}>Reports</a>
         <a href="{{ url_for('payment_history') }}" {% if request.endpoint == 'payment_history' %}aria-current="page"{% endif %}>Payments</a>
         <a href="{{ url_for('maintenance_requests') }}" {% if request.endpoint == 'maintenance_requests' %}aria-current="page"{% endif %}>Maintenance</a>

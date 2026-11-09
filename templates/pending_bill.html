@@ -16,7 +16,7 @@
             <h1>Pending bill for Room {{ room.room_number }}</h1>
             <p class="muted">Tenant: {{ room.tenant.name or room.tenant.email }}</p>
         </div>
-        <a href="{{ url_for('dashboard') }}" class="btn secondary-action">Back to dashboard</a>
+        <a href="{{ return_url }}" class="btn secondary-action">Back to properties</a>
     </div>
 
     {% with messages = get_flashed_messages() %}

@@ -28,7 +28,7 @@
         <p>Water amount: <b>Ksh <span id="water-total">{{ bill.amount if bill else '0.00' }}</span></b></p>
         <button type="submit">Save Water Bill</button>
     </form>
-    <p><a href="{{ url_for('dashboard') }}">Back to dashboard</a></p>
+    <p><a href="{{ return_url }}">Back to properties</a></p>
 </div>
 <script>
     const units = document.getElementById('units_used');
