@@ -8,6 +8,11 @@ import secrets
 from mpesa import stk_push2
 from datetime import datetime, date, timedelta
 from functools import wraps
+from openpyxl import Workbook
+from openpyxl.formatting.rule import CellIsRule
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.table import Table, TableStyleInfo
 from maintenance import is_maintenance_on, set_maintenance
 if (os.getenv('APP_ENV') or os.getenv('FLASK_ENV') or 'development').lower() == 'development':
     os.environ.setdefault('OAUTHLIB_INSECURE_TRANSPORT', '1')
@@ -1294,6 +1299,257 @@ def landlord_reports():
         'open_maintenance': open_maintenance,
         'resolved_maintenance': resolved_maintenance,
     }
+
+    tenant_ledger_rows = []
+    for room in sorted(
+        (room for room in rooms if room.tenant),
+        key=lambda room: (
+            (room.property.name or '').casefold(),
+            (room.room_number or '').casefold(),
+        ),
+    ):
+        period = get_billing_period(room)
+        if not period:
+            tenant_ledger_rows.append({
+                'room': room,
+                'period': None,
+                'rent': room.rent_amount,
+                'water': None,
+                'other_bills': None,
+                'total_due': None,
+                'paid': None,
+                'balance': None,
+                'status': 'No billing period',
+                'last_payment': None,
+            })
+            continue
+        room_summary = get_payment_summary(room, period['key'])
+        last_payment = Payment.query.filter_by(
+            room_id=room.id,
+            month=period['key'],
+        ).order_by(Payment.date_paid.desc()).first()
+        tenant_ledger_rows.append({
+            'room': room,
+            'period': period,
+            'rent': room.rent_amount,
+            'water': room_summary['water_bill'].amount if room_summary['water_bill'] else 0,
+            'other_bills': room_summary['pending_total'],
+            'total_due': room_summary['total_amount'],
+            'paid': room_summary['total_paid'],
+            'balance': room_summary['balance'],
+            'status': 'Paid' if room_summary['balance'] == 0 else 'Balance due',
+            'last_payment': last_payment.date_paid if last_payment else None,
+        })
+
+    if request.args.get('export') == 'xlsx':
+        workbook = Workbook()
+        summary_sheet = workbook.active
+        summary_sheet.title = 'Portfolio Summary'
+        ledger_sheet = workbook.create_sheet('Tenant Ledger')
+        payments_sheet = workbook.create_sheet('Payment History')
+        green = '155B4A'
+        dark_green = '123A34'
+        gold = 'D8B45A'
+        pale_green = 'EAF3EF'
+        pale_gold = 'FBF4E4'
+        pale_red = 'FCE9E6'
+        white = 'FFFFFF'
+        muted = '60736D'
+        thin_border = Border(bottom=Side(style='thin', color='E1E9E5'))
+        money_format = '#,##0.00;[Red](#,##0.00);-'
+
+        def add_title(sheet, title, subtitle, last_column):
+            sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_column)
+            title_cell = sheet.cell(1, 1, title)
+            title_cell.font = Font(name='Aptos Display', size=19, bold=True, color=white)
+            title_cell.fill = PatternFill('solid', fgColor=dark_green)
+            title_cell.alignment = Alignment(vertical='center')
+            sheet.row_dimensions[1].height = 36
+            for column in range(1, last_column + 1):
+                sheet.cell(1, column).fill = PatternFill('solid', fgColor=dark_green)
+            sheet.merge_cells(start_row=2, start_column=1, end_row=2, end_column=last_column)
+            subtitle_cell = sheet.cell(2, 1, subtitle)
+            subtitle_cell.font = Font(name='Aptos', size=10, italic=True, color=muted)
+            subtitle_cell.alignment = Alignment(vertical='center')
+            sheet.row_dimensions[2].height = 23
+            sheet.sheet_view.showGridLines = False
+
+        def add_headers(sheet, row_number, headers):
+            for column, value in enumerate(headers, 1):
+                cell = sheet.cell(row_number, column, value)
+                cell.font = Font(name='Aptos', bold=True, color=white)
+                cell.fill = PatternFill('solid', fgColor=green)
+                cell.alignment = Alignment(vertical='center', wrap_text=True)
+            sheet.row_dimensions[row_number].height = 30
+
+        def add_data_row(sheet, row_number, values):
+            for column, value in enumerate(values, 1):
+                cell = sheet.cell(row_number, column, value)
+                if isinstance(value, str):
+                    cell.data_type = 's'
+                cell.font = Font(name='Aptos', size=10, color='23332E')
+                cell.alignment = Alignment(vertical='top', wrap_text=True)
+                cell.border = thin_border
+                if row_number % 2:
+                    cell.fill = PatternFill('solid', fgColor='F6F9F7')
+
+        def add_table(sheet, name, header_row, last_row, last_column):
+            if last_row <= header_row:
+                return
+            table = Table(
+                displayName=name,
+                ref=f'A{header_row}:{get_column_letter(last_column)}{last_row}',
+            )
+            table.tableStyleInfo = TableStyleInfo(
+                name='TableStyleMedium4',
+                showFirstColumn=False,
+                showLastColumn=False,
+                showRowStripes=True,
+                showColumnStripes=False,
+            )
+            sheet.add_table(table)
+            sheet.auto_filter.ref = table.ref
+
+        add_title(
+            summary_sheet,
+            'BomaManager | Landlord Portfolio Report',
+            f'Generated {date.today().strftime("%d %b %Y")} · Current tenant balances and recent collections',
+            5,
+        )
+        summary_sheet['A4'] = 'Portfolio snapshot'
+        summary_sheet['A4'].font = Font(name='Aptos Display', size=13, bold=True, color=green)
+        add_headers(summary_sheet, 5, ['Metric', 'Value', 'Metric', 'Value', 'Notes'])
+        snapshot_rows = [
+            ('Collected this month (Ksh)', summary['collected_this_month'], 'Outstanding now (Ksh)', summary['outstanding_total'], 'Current billing periods'),
+            ('Occupancy', summary['occupancy_rate'] / 100, 'Occupied rooms', summary['occupied_rooms'], f"of {summary['total_rooms']} total rooms"),
+            ('Open maintenance', summary['open_maintenance'], 'Resolved maintenance', summary['resolved_maintenance'], 'All recorded requests'),
+            ('Current tenant accounts', len(tenant_ledger_rows), 'Accounts with balances', sum(1 for row in tenant_ledger_rows if row['balance'] is not None and row['balance'] > 0), 'See Tenant Ledger for details'),
+        ]
+        for row_number, values in enumerate(snapshot_rows, 6):
+            add_data_row(summary_sheet, row_number, values)
+            for column in (2, 4):
+                summary_sheet.cell(row_number, column).font = Font(name='Aptos', size=10, bold=True, color=green)
+            summary_sheet.cell(row_number, 2).number_format = money_format if row_number == 6 else '0%'
+            if row_number == 6:
+                summary_sheet.cell(row_number, 4).number_format = money_format
+            if row_number == 7:
+                summary_sheet.cell(row_number, 2).number_format = '0%'
+
+        summary_sheet['A12'] = 'Monthly collections · last six months'
+        summary_sheet['A12'].font = Font(name='Aptos Display', size=13, bold=True, color=green)
+        add_headers(summary_sheet, 13, ['Month', 'Collected (Ksh)'])
+        for row_number, (month, total) in enumerate(monthly_totals.items(), 14):
+            add_data_row(summary_sheet, row_number, [datetime.strptime(month, '%Y-%m').strftime('%b %Y'), total])
+            summary_sheet.cell(row_number, 2).number_format = money_format
+        summary_sheet.column_dimensions['A'].width = 30
+        summary_sheet.column_dimensions['B'].width = 20
+        summary_sheet.column_dimensions['C'].width = 27
+        summary_sheet.column_dimensions['D'].width = 20
+        summary_sheet.column_dimensions['E'].width = 31
+        summary_sheet.freeze_panes = 'A6'
+        summary_sheet.sheet_properties.tabColor = gold
+
+        ledger_headers = [
+            'Property', 'Room number', 'Tenant', 'Phone', 'Billing period',
+            'Rent (Ksh)', 'Water bill (Ksh)', 'Other bills (Ksh)',
+            'Total due (Ksh)', 'Paid this period (Ksh)', 'Balance (Ksh)',
+            'Payment status', 'Last payment date',
+        ]
+        add_title(
+            ledger_sheet,
+            'Tenant Balance Ledger',
+            'One row per occupied room · Amounts are for the current billing period',
+            len(ledger_headers),
+        )
+        add_headers(ledger_sheet, 4, ledger_headers)
+        for row_number, row in enumerate(tenant_ledger_rows, 5):
+            room = row['room']
+            add_data_row(ledger_sheet, row_number, [
+                room.property.name,
+                room.room_number,
+                room.tenant.name or room.tenant.email,
+                room.tenant.contact_number or '',
+                row['period']['label'] if row['period'] else 'Not set',
+                row['rent'],
+                row['water'],
+                row['other_bills'],
+                row['total_due'],
+                row['paid'],
+                row['balance'],
+                row['status'],
+                row['last_payment'],
+            ])
+            for column in range(6, 12):
+                ledger_sheet.cell(row_number, column).number_format = money_format
+            ledger_sheet.cell(row_number, 13).number_format = 'dd mmm yyyy'
+            if row['balance'] is not None and row['balance'] > 0:
+                ledger_sheet.cell(row_number, 11).fill = PatternFill('solid', fgColor=pale_red)
+                ledger_sheet.cell(row_number, 11).font = Font(name='Aptos', bold=True, color='9C342B')
+            elif row['balance'] == 0:
+                ledger_sheet.cell(row_number, 12).fill = PatternFill('solid', fgColor=pale_green)
+                ledger_sheet.cell(row_number, 12).font = Font(name='Aptos', bold=True, color=green)
+        if not tenant_ledger_rows:
+            add_data_row(ledger_sheet, 5, ['No tenants are currently assigned to rooms.'])
+        add_table(ledger_sheet, 'TenantBalanceLedger', 4, 4 + len(tenant_ledger_rows), len(ledger_headers))
+        ledger_sheet.freeze_panes = 'A5'
+        ledger_sheet.sheet_properties.tabColor = green
+        ledger_widths = [24, 15, 26, 18, 27, 16, 18, 19, 17, 23, 18, 20, 20]
+        for column, width in enumerate(ledger_widths, 1):
+            ledger_sheet.column_dimensions[get_column_letter(column)].width = width
+        if tenant_ledger_rows:
+            balance_range = f'K5:K{4 + len(tenant_ledger_rows)}'
+            ledger_sheet.conditional_formatting.add(
+                balance_range,
+                CellIsRule(
+                    operator='greaterThan',
+                    formula=['0'],
+                    fill=PatternFill('solid', fgColor=pale_red),
+                ),
+            )
+
+        payment_headers = [
+            'Date paid', 'Property', 'Room number', 'Tenant', 'Phone',
+            'Billing month', 'Amount paid (Ksh)', 'Payment method', 'Receipt / reference',
+        ]
+        add_title(
+            payments_sheet,
+            'Recent Payment Transactions',
+            'Recorded payments from the last six months',
+            len(payment_headers),
+        )
+        add_headers(payments_sheet, 4, payment_headers)
+        for row_number, payment in enumerate(payments, 5):
+            add_data_row(payments_sheet, row_number, [
+                payment.date_paid,
+                payment.room.property.name,
+                payment.room.room_number,
+                payment.tenant.name or payment.tenant.email,
+                payment.tenant.contact_number or '',
+                payment.month,
+                payment.amount,
+                'Cash' if payment.mpesa_code == 'CASH' else 'M-Pesa',
+                payment.mpesa_code or '',
+            ])
+            payments_sheet.cell(row_number, 1).number_format = 'dd mmm yyyy hh:mm'
+            payments_sheet.cell(row_number, 7).number_format = money_format
+        if not payments:
+            add_data_row(payments_sheet, 5, ['No payments recorded in the last six months.'])
+        add_table(payments_sheet, 'RecentPaymentTransactions', 4, 4 + len(payments), len(payment_headers))
+        payments_sheet.freeze_panes = 'A5'
+        payments_sheet.sheet_properties.tabColor = '72A99A'
+        payment_widths = [22, 24, 15, 26, 18, 18, 22, 18, 24]
+        for column, width in enumerate(payment_widths, 1):
+            payments_sheet.column_dimensions[get_column_letter(column)].width = width
+
+        workbook_buffer = io.BytesIO()
+        workbook.save(workbook_buffer)
+        workbook_buffer.seek(0)
+        response = app.response_class(
+            workbook_buffer.getvalue(),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response.headers['Content-Disposition'] = 'attachment; filename=bomamanager-landlord-report.xlsx'
+        return response
 
     if request.args.get('export') == 'csv':
         output = io.StringIO()

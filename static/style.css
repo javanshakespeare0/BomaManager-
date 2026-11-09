@@ -1883,16 +1883,34 @@ html[data-theme="contrast"] .payment-record {
     }
 
     .dashboard-page .landlord-dashboard .dashboard-header {
+        flex-direction: column;
+        align-items: stretch;
         gap: 18px;
         padding: 20px 18px;
     }
 
     .dashboard-page .landlord-dashboard .dashboard-header-actions {
+        width: 100%;
         flex-direction: row;
         flex-wrap: wrap;
         align-items: center;
-        justify-content: flex-start;
+        justify-content: space-between;
         gap: 10px;
+    }
+
+    .dashboard-page .landlord-dashboard .theme-control {
+        flex: 1 1 180px;
+        min-width: 0;
+    }
+
+    .dashboard-page .landlord-dashboard .theme-control select {
+        min-width: 0;
+        max-width: 180px;
+    }
+
+    .dashboard-page .landlord-dashboard .logout-link {
+        min-height: 44px;
+        align-items: center;
     }
 
     .dashboard-page .landlord-dashboard .overview-grid {
@@ -1975,6 +1993,48 @@ html[data-theme="contrast"] .payment-record {
 }
 
 @media (max-width: 420px) {
+    .dashboard-page .landlord-dashboard {
+        padding: 11px;
+    }
+
+    .dashboard-page .landlord-dashboard .dashboard-header {
+        padding: 18px 14px;
+    }
+
+    .dashboard-page .landlord-dashboard .dashboard-header-actions {
+        align-items: stretch;
+    }
+
+    .dashboard-page .landlord-dashboard .theme-control {
+        flex-basis: 100%;
+        justify-content: space-between;
+    }
+
+    .dashboard-page .landlord-dashboard .theme-control select {
+        flex: 0 1 180px;
+    }
+
+    .dashboard-page .landlord-dashboard .monthly-collection-bar {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 8px;
+        padding: 16px;
+    }
+
+    .dashboard-page .landlord-dashboard .countdown-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dashboard-page .landlord-dashboard .section-heading {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .dashboard-page .landlord-dashboard .tenant-row {
+        flex-direction: column;
+        gap: 8px;
+    }
+
     .dashboard-page .landlord-dashboard .dashboard-actions {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 8px;

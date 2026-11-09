@@ -4,11 +4,14 @@ import tempfile
 import unittest
 from datetime import date, datetime, timedelta
 
+from openpyxl import load_workbook
+
 os.environ['APP_ENV'] = 'testing'
 os.environ['DATABASE_URL'] = 'sqlite://'
 
 from app import (
     MaintenanceRequest,
+    Payment,
     PaymentReminder,
     Property,
     Room,
@@ -163,10 +166,22 @@ class ProductivityFeatureTests(unittest.TestCase):
             self.assertEqual(PaymentReminder.query.count(), 0)
 
     def test_reports_include_summary_and_csv_export(self):
+        current_period = date.today().replace(day=1).isoformat()
+        with app.app_context():
+            db.session.add(Payment(
+                amount=2500,
+                month=current_period,
+                date_paid=datetime.now(),
+                mpesa_code='TEST-RECEIPT',
+                room_id=self.room_id,
+                tenant_id=self.tenant_id,
+            ))
+            db.session.commit()
         self.login_as(self.landlord_id)
 
         page = self.client.get('/reports')
         export = self.client.get('/reports?export=csv')
+        excel_export = self.client.get('/reports?export=xlsx')
 
         self.assertEqual(page.status_code, 200)
         self.assertIn(b'Collected this month', page.data)
@@ -175,6 +190,17 @@ class ProductivityFeatureTests(unittest.TestCase):
         self.assertIn('text/csv', export.content_type)
         self.assertIn(b'Tenant One', export.data)
         self.assertIn(b'Outstanding balance (Ksh)', export.data)
+        self.assertEqual(excel_export.status_code, 200)
+        self.assertIn('spreadsheetml.sheet', excel_export.content_type)
+        workbook = load_workbook(io.BytesIO(excel_export.data), data_only=True)
+        self.assertEqual(workbook.sheetnames, ['Portfolio Summary', 'Tenant Ledger', 'Payment History'])
+        ledger = workbook['Tenant Ledger']
+        self.assertEqual(ledger['A5'].value, 'Test Property')
+        self.assertEqual(ledger['B5'].value, '101')
+        self.assertEqual(ledger['C5'].value, 'Tenant One')
+        self.assertEqual(ledger['J5'].value, 2500)
+        self.assertEqual(ledger['K5'].value, 7500)
+        self.assertEqual(workbook['Payment History']['I5'].value, 'TEST-RECEIPT')
 
     def test_maintenance_priority_and_private_photo_upload(self):
         self.login_as(self.tenant_id)
