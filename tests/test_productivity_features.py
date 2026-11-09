@@ -12,6 +12,7 @@ from app import (
     PaymentReminder,
     Property,
     Room,
+    RoomRequest,
     User,
     app,
     db,
@@ -63,6 +64,7 @@ class ProductivityFeatureTests(unittest.TestCase):
             db.session.commit()
             self.landlord_id = self.landlord.id
             self.tenant_id = self.tenant.id
+            self.property_id = self.property.id
             self.room_id = self.room.id
         self.client = app.test_client()
 
@@ -79,6 +81,20 @@ class ProductivityFeatureTests(unittest.TestCase):
 
     def test_dashboard_prioritizes_followups_and_exposes_productivity_links(self):
         with app.app_context():
+            applicant = User(
+                email='applicant@example.test',
+                password='unused',
+                role='tenant',
+                landlord_id=self.landlord_id,
+                name='Applicant Two',
+            )
+            vacant_room = Room(
+                room_number='102',
+                room_type='One Bedroom',
+                rent_amount=12000,
+                property_id=self.property_id,
+                is_occupied=False,
+            )
             db.session.add(MaintenanceRequest(
                 title='Urgent leak',
                 description='Water is entering the unit.',
@@ -86,7 +102,16 @@ class ProductivityFeatureTests(unittest.TestCase):
                 room_id=self.room_id,
                 tenant_id=self.tenant_id,
             ))
+            db.session.add_all([applicant, vacant_room])
+            db.session.flush()
+            application = RoomRequest(
+                room_id=vacant_room.id,
+                tenant_id=applicant.id,
+            )
+            db.session.add(application)
             db.session.commit()
+            application_id = application.id
+            vacant_room_id = vacant_room.id
         self.login_as(self.landlord_id)
 
         response = self.client.get('/dashboard')
@@ -96,6 +121,12 @@ class ProductivityFeatureTests(unittest.TestCase):
         self.assertIn(b'Copy reminder', response.data)
         self.assertIn(b'urgent', response.data)
         self.assertIn(b'/reports', response.data)
+        self.assertIn(b'Room application', response.data)
+        self.assertIn(b'Vacant room', response.data)
+        self.assertIn(f'/room-requests/{application_id}/approve'.encode(), response.data)
+        self.assertIn(f'/assign_tenant/{vacant_room_id}'.encode(), response.data)
+        self.assertIn(b'Approve this application and assign the room', response.data)
+        self.assertLess(response.data.index(b'Urgent leak'), response.data.index(b'Applicant Two'))
 
     def test_landlord_can_log_manual_payment_reminder(self):
         self.login_as(self.landlord_id)

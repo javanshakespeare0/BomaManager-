@@ -102,28 +102,29 @@
                 <span class="attention-total">{{ attention_count }} {{ 'item' if attention_count == 1 else 'items' }}</span>
             </header>
             <div class="attention-summary-grid">
-                <a href="#rent-followups" class="attention-summary-card">
+                <a href="#attention-items" class="attention-summary-card">
                     <span>Outstanding rent</span>
                     <strong>{{ rent_followups|length }}</strong>
                 </a>
-                <a href="{{ url_for('maintenance_requests', status='open') }}" class="attention-summary-card">
+                <a href="{{ url_for('maintenance_requests') }}" class="attention-summary-card">
                     <span>Maintenance</span>
                     <strong data-attention-count="{{ maintenance_attention_count }}">{{ maintenance_attention_count }}</strong>
                 </a>
-                <a href="#pending-applications" class="attention-summary-card">
+                <a href="#attention-items" class="attention-summary-card">
                     <span>Room applications</span>
                     <strong>{{ room_requests|length }}</strong>
                 </a>
-                <a href="#portfolio-title" class="attention-summary-card">
+                <a href="#attention-items" class="attention-summary-card">
                     <span>Vacant rooms</span>
                     <strong>{{ vacant_rooms }}</strong>
                 </a>
             </div>
-            {% if rent_followups %}
-                <div class="attention-list" id="rent-followups">
-                    <h3>Rent follow-up</h3>
-                    {% for item in rent_followups[:5] %}
-                        <article class="attention-row">
+            <div class="attention-list" id="attention-items" role="list" aria-label="Prioritized follow-up actions">
+                {% for entry in attention_items %}
+                    <article class="attention-row attention-item-{{ entry.kind }}" role="listitem">
+                        {% if entry.kind == 'rent' %}
+                            {% set item = entry.followup %}
+                            <span class="attention-kind-badge">{{ 'Past due' if item.is_due else 'Balance open' }}</span>
                             <div class="attention-row-details">
                                 <strong>{{ item.room.property.name }} · Room {{ item.room.room_number }}</strong>
                                 <span>{{ item.room.tenant.name or item.room.tenant.email }} · {{ item.period.label }}</span>
@@ -134,69 +135,49 @@
                             </div>
                             <div class="attention-row-actions">
                                 <button type="button" class="btn secondary-action" data-copy-value="{{ item.message|e }}" data-copy-kind="reminder">Copy reminder</button>
-                                <form method="POST" action="{{ url_for('log_payment_reminder', room_id=item.room.id) }}">
+                                <form method="POST" action="{{ url_for('log_payment_reminder', room_id=item.room.id) }}" onsubmit="return confirm('Record that you manually sent this payment reminder? BomaManager will not send it.');">
                                     <button type="submit" class="btn primary-action">Log sent</button>
                                 </form>
                             </div>
-                        </article>
-                    {% endfor %}
-                    {% if rent_followups|length > 5 %}
-                        <p class="muted">Showing the 5 largest balances.</p>
-                    {% endif %}
-                </div>
-            {% endif %}
-            {% if maintenance_followups %}
-                <div class="attention-list">
-                    <h3>Maintenance follow-up</h3>
-                    {% for item in maintenance_followups %}
-                        <a class="attention-row attention-row-link" href="{{ url_for('maintenance_requests', status=item.status) }}">
+                        {% elif entry.kind == 'maintenance' %}
+                            {% set item = entry.request %}
                             <span class="maintenance-priority maintenance-priority-{{ item.priority }}">{{ item.priority|title }}</span>
                             <span class="attention-row-details">
                                 <strong>{{ item.title }}</strong>
                                 <span>{{ item.room.property.name }} · Room {{ item.room.room_number }} · {{ item.status.replace('_', ' ')|title }}</span>
                             </span>
-                            <span aria-hidden="true">View</span>
-                        </a>
-                    {% endfor %}
-                </div>
-            {% endif %}
-            <span class="attention-feedback" data-copy-feedback role="status" aria-live="polite"></span>
-        </section>
-
-        <section class="property-card">
-            <div class="section-heading">
-                <div>
-                    <p class="eyebrow">Room applications</p>
-                    <h2 id="pending-applications">Pending room requests</h2>
-                </div>
-                {% if room_requests|length %}
-                    <span class="attention-badge" data-attention-count="{{ room_requests|length }}" aria-label="{{ room_requests|length }} pending room requests">{{ room_requests|length }}</span>
+                            <a class="btn secondary-action" href="{{ url_for('maintenance_requests', status=item.status) }}">Review</a>
+                        {% elif entry.kind == 'application' %}
+                            {% set room_request = entry.request %}
+                            <span class="attention-kind-badge">Room application</span>
+                            <div class="attention-row-details">
+                                <strong>{{ room_request.tenant.name or room_request.tenant.email }} · Room {{ room_request.room.room_number }}</strong>
+                                <span>{{ room_request.room.property.name }} · Ksh {{ room_request.room.rent_amount }} per month</span>
+                                <span>{{ room_request.tenant.email }} · {{ room_request.tenant.contact_number or 'No contact number' }}</span>
+                            </div>
+                            <div class="attention-row-actions">
+                                <form method="POST" action="{{ url_for('approve_room_request', request_id=room_request.id) }}" onsubmit="return confirm('Approve this application and assign the room to this tenant?');">
+                                    <button class="btn primary-action" type="submit">Approve &amp; assign</button>
+                                </form>
+                                <form method="POST" action="{{ url_for('reject_room_request', request_id=room_request.id) }}" onsubmit="return confirm('Reject this room application?');">
+                                    <button class="btn btn-danger" type="submit">Reject</button>
+                                </form>
+                            </div>
+                        {% else %}
+                            {% set room = entry.room %}
+                            <span class="attention-kind-badge">Vacant room</span>
+                            <span class="attention-row-details">
+                                <strong>{{ room.property.name }} · Room {{ room.room_number }}</strong>
+                                <span>{{ room.room_type }} · Ksh {{ room.rent_amount }} per month</span>
+                            </span>
+                            <a class="btn primary-action" href="{{ url_for('assign_tenant', room_id=room.id) }}">Assign tenant</a>
+                        {% endif %}
+                    </article>
                 {% else %}
-                    <span class="count-badge">0 pending</span>
-                {% endif %}
-            </div>
-            {% if room_requests %}
-                {% for room_request in room_requests %}
-                    <div class="tenant-row">
-                        <div>
-                            <strong>{{ room_request.tenant.name or room_request.tenant.email }} · Room {{ room_request.room.room_number }}</strong>
-                            <span>{{ room_request.room.property.name }} · Ksh {{ room_request.room.rent_amount }} per month</span>
-                            <span>{{ room_request.tenant.email }} · {{ room_request.tenant.contact_number or 'No contact number' }}</span>
-                            <span>{{ room_request.room.requests|selectattr('status', 'equalto', 'pending')|list|length }} pending applicant(s) for this room</span>
-                        </div>
-                        <div class="section-actions">
-                            <form method="POST" action="{{ url_for('approve_room_request', request_id=room_request.id) }}">
-                                <button class="btn primary-action" type="submit">Approve &amp; assign</button>
-                            </form>
-                            <form method="POST" action="{{ url_for('reject_room_request', request_id=room_request.id) }}">
-                                <button class="btn btn-danger" type="submit">Reject</button>
-                            </form>
-                        </div>
-                    </div>
+                    <p class="empty-state">You’re all caught up. No rent, maintenance, applications, or vacancies need attention.</p>
                 {% endfor %}
-            {% else %}
-                <p class="empty-state">No room requests are waiting for your review.</p>
-            {% endif %}
+            </div>
+            <span class="attention-feedback" data-copy-feedback role="status" aria-live="polite"></span>
         </section>
 
         <div class="property-card destination-card">

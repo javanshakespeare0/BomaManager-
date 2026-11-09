@@ -898,6 +898,7 @@ def dashboard():
                     'room': room,
                     'period': period,
                     'balance': summary['balance'],
+                    'is_due': period['due_at'] <= now,
                     'reminder': latest_reminder_by_room.get((room.id, period['key'])),
                     'message': (
                         f"Hello {room.tenant.name or room.tenant.email}, a friendly reminder "
@@ -919,7 +920,42 @@ def dashboard():
                 item.created_at,
             )
         )
-        maintenance_followups = maintenance_followups[:5]
+        attention_items = []
+        for item in maintenance_followups:
+            priority = priority_order.get(item.priority, 2)
+            attention_items.append({
+                'kind': 'maintenance',
+                'priority': 0 if priority == 0 else 2 if priority == 1 else 4 if priority == 2 else 5,
+                'sort_at': item.created_at,
+                'request': item,
+            })
+        for item in rent_followups:
+            attention_items.append({
+                'kind': 'rent',
+                'priority': 1 if item['is_due'] else 3,
+                'sort_at': item['period']['due_at'],
+                'followup': item,
+            })
+        for room_request in room_requests:
+            attention_items.append({
+                'kind': 'application',
+                'priority': 3,
+                'sort_at': room_request.requested_at,
+                'request': room_request,
+            })
+        for room in landlord_rooms:
+            if not room.tenant:
+                attention_items.append({
+                    'kind': 'vacancy',
+                    'priority': 6,
+                    'sort_at': datetime.max,
+                    'room': room,
+                })
+        attention_items.sort(key=lambda item: (
+            item['priority'],
+            item['sort_at'],
+            item.get('room').property.name.lower() if item.get('room') else '',
+        ))
         paid_rooms = sum(
             1
             for room in landlord_rooms
@@ -929,7 +965,7 @@ def dashboard():
         )
         subscription_deadline = current_user.subscription_deadline()
         subscription_countdown = get_countdown_parts(subscription_deadline)
-        attention_count = len(rent_followups) + len(room_requests) + maintenance_attention_count + vacant_rooms
+        attention_count = len(attention_items)
         return render_template(
             'dashboard.html',
             properties=properties,
@@ -937,6 +973,7 @@ def dashboard():
             room_requests=room_requests,
             maintenance_attention_count=maintenance_attention_count,
             maintenance_followups=maintenance_followups,
+            attention_items=attention_items,
             rent_followups=rent_followups,
             attention_count=attention_count,
             vacant_rooms=vacant_rooms,

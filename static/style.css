@@ -2612,8 +2612,22 @@ html[data-theme="contrast"] .maintenance-status-resolved {
     background: var(--surface-raised);
 }
 
+.attention-kind-badge {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    padding: 5px 9px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--accent-strong);
+    font: 700 .7rem/1.2 "Segoe UI", Arial, sans-serif;
+    white-space: nowrap;
+}
+
 .attention-row-details {
     display: grid;
+    flex: 1 1 auto;
     min-width: 0;
     gap: 3px;
 }
