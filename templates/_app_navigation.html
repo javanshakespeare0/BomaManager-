@@ -1,0 +1,18 @@
+{% if current_user.is_authenticated and current_user.role == 'landlord' %}
+<nav class="app-navigation" aria-label="Main navigation">
+    <a class="app-navigation-home" href="{{ url_for('dashboard') }}">
+        <img src="{{ url_for('static', filename='logo.svg') }}" alt="" aria-hidden="true">
+        <span>BomaManager</span>
+    </a>
+    <div class="app-navigation-links">
+        <a href="{{ url_for('dashboard') }}" {% if request.endpoint == 'dashboard' %}aria-current="page"{% endif %}>Overview</a>
+        <a href="{{ url_for('landlord_reports') }}" {% if request.endpoint == 'landlord_reports' %}aria-current="page"{% endif %}>Reports</a>
+        <a href="{{ url_for('payment_history') }}" {% if request.endpoint == 'payment_history' %}aria-current="page"{% endif %}>Payments</a>
+        <a href="{{ url_for('maintenance_requests') }}" {% if request.endpoint == 'maintenance_requests' %}aria-current="page"{% endif %}>Maintenance</a>
+        <a href="{{ url_for('subscription_page') }}" {% if request.endpoint == 'subscription_page' %}aria-current="page"{% endif %}>Subscription</a>
+        <a href="{{ url_for('add_property') }}" {% if request.endpoint in ['add_property', 'edit_property'] %}aria-current="page"{% endif %}>Add property</a>
+        <a href="{{ url_for('add_tenant') }}" {% if request.endpoint == 'add_tenant' %}aria-current="page"{% endif %}>Add tenant</a>
+        <a href="{{ url_for('settings') }}" {% if request.endpoint == 'settings' %}aria-current="page"{% endif %}>Settings</a>
+    </div>
+</nav>
+{% endif %}

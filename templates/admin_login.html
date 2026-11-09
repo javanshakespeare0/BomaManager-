@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% include '_favicon.html' %}
   <title>BomaManager Admin</title>
   <style>
     * { box-sizing: border-box; }
@@ -37,6 +38,7 @@
 </head>
 <body>
   <main>
+    <img class="admin-brand-mark" src="{{ url_for('static', filename='logo.svg') }}" alt="BomaManager">
     <h1>BomaManager Admin</h1>
     <p>Sign in to manage the platform.</p>
     <form method="POST">

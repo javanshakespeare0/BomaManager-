@@ -2,11 +2,13 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% include '_favicon.html' %}
     <title>Update Assignment Date - BomaManager</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
 <body>
+{% include '_app_navigation.html' %}
 <div class="container">
     <h1>Update Assignment Date</h1>
     <p>Room {{ room.room_number }} · {{ room.tenant.name or room.tenant.email }}</p>

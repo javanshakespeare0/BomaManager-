@@ -2,15 +2,18 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% include '_favicon.html' %}
     <title>Payment History - BomaManager</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
 <body>
 <div class="container">
+    {% include '_app_navigation.html' %}
     <h1>Payment History</h1>
     {% if current_user.role == 'landlord' %}
-        <p class="muted">A clear record of rent and water payments collected from your tenants.</p>
+        <p class="muted">A clear record of rent collected and manual payment follow-ups logged.</p>
+        <p><a class="btn secondary-action" href="{{ url_for('landlord_reports') }}">Open portfolio reports</a></p>
         {% if payment_rows %}
             {% for row in payment_rows %}
             {% set p = row.payment %}
@@ -43,6 +46,25 @@
                 {% endfor %}
             {% else %}
                 <p class="muted">Your monthly collection totals will appear here.</p>
+            {% endif %}
+        </section>
+        <section class="reminder-history">
+            <p class="eyebrow">Follow-up log</p>
+            <h2>Payment reminders sent</h2>
+            <p class="muted">This log records reminders you marked as sent. BomaManager does not send messages.</p>
+            {% if reminders %}
+                {% for reminder in reminders %}
+                    <div class="reminder-history-row">
+                        <div>
+                            <strong>{{ reminder.tenant.name or reminder.tenant.email }}</strong>
+                            <span>{{ reminder.room.property.name }} · Room {{ reminder.room.room_number }} · {{ reminder.month }}</span>
+                        </div>
+                        <span>Ksh {{ '%.2f'|format(reminder.amount) }}</span>
+                        <time datetime="{{ reminder.created_at.isoformat() }}">{{ reminder.created_at.strftime('%d %b %Y at %H:%M') }}</time>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p class="empty-state">No payment reminders have been logged.</p>
             {% endif %}
         </section>
     {% elif payments %}

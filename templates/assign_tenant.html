@@ -2,11 +2,13 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% include '_favicon.html' %}
     <title>Assign Tenant - BomaManager</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
 <body>
+{% include '_app_navigation.html' %}
 <div class="container auth-shell">
     <div class="auth-card">
         <h1>Assign tenant to Room {{ room.room_number }}</h1>

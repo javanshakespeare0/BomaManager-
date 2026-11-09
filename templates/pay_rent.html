@@ -2,11 +2,13 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% include '_favicon.html' %}
     <title>Pay Rent - BomaManager</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
 <body>
+{% include '_app_navigation.html' %}
 <div class="container">
     <h1>Pay Rent for Room {{ room.room_number }}</h1>
     <p>Property: {{ room.property.name }}</p>

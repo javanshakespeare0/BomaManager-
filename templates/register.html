@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% include '_favicon.html' %}
     <title>Register - BomaManager</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
@@ -10,7 +11,10 @@
 <body>
 <div class="container auth-shell">
     <div class="auth-card">
-        <p class="eyebrow">BomaManager</p>
+        <a class="brand-lockup" href="{{ url_for('login') }}" aria-label="BomaManager home">
+            <img src="{{ url_for('static', filename='logo.svg') }}" alt="" aria-hidden="true">
+            <span>BomaManager</span>
+        </a>
         <h1>Create account</h1>
         {% with messages = get_flashed_messages() %}
           {% if messages %}

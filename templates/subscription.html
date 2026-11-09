@@ -3,11 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% include '_favicon.html' %}
   <title>Subscription plans - BomaManager</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
 <body>
+{% include '_app_navigation.html' %}
 <div class="container subscription-shell">
   <header class="subscription-header">
     <div>

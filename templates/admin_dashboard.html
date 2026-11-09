@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% include '_favicon.html' %}
   <title>BomaManager Admin Dashboard</title>
   <style>
     * { box-sizing: border-box; }
@@ -98,7 +99,10 @@
       </form>
     </div>
     <header>
-      <div><p>Super admin</p><h1>BomaManager overview</h1></div>
+      <div class="admin-brand-heading">
+        <img src="{{ url_for('static', filename='logo.svg') }}" alt="" aria-hidden="true">
+        <div><p>Super admin</p><h1>BomaManager overview</h1></div>
+      </div>
       <div>
         <a href="{{ url_for('admin.admin_logout') }}">Log out</a>
       </div>

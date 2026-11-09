@@ -2,15 +2,22 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% include '_favicon.html' %}
     <title>Dashboard - BomaManager</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
 <body class="dashboard-page{% if current_user.role == 'landlord' %} landlord-dashboard-page{% endif %}">
 <div class="container dashboard-shell{% if current_user.role == 'landlord' %} landlord-dashboard{% endif %}">
+    {% include '_app_navigation.html' %}
     <header class="dashboard-header">
         <div>
-            <p class="eyebrow">BomaManager</p>
+            {% if current_user.role != 'landlord' %}
+            <a class="brand-lockup dashboard-brand" href="{{ url_for('dashboard') }}" aria-label="BomaManager home">
+                <img src="{{ url_for('static', filename='logo.svg') }}" alt="" aria-hidden="true">
+                <span>BomaManager</span>
+            </a>
+            {% endif %}
             <h1>Welcome, {{ current_user.name or current_user.email }}</h1>
             <p class="muted">Manage your properties, rooms, and tenants.</p>
         </div>
@@ -26,23 +33,6 @@
         </div>
     </header>
 
-    {% if current_user.role == 'landlord' %}
-        <nav class="dashboard-actions" aria-label="Dashboard actions">
-            <a href="{{ url_for('add_property') }}" class="btn primary-action">Add property</a>
-            <a href="{{ url_for('add_tenant') }}" class="btn secondary-action">Add tenant</a>
-            <a href="{{ url_for('subscription_page') }}" class="btn secondary-action">Subscription</a>
-            <a href="{{ url_for('payment_history') }}" class="btn secondary-action">Payment history</a>
-            <a href="{{ url_for('maintenance_requests') }}" class="btn secondary-action dashboard-action-with-count">
-                Maintenance
-                {% if maintenance_attention_count %}
-                    <span class="attention-badge" data-attention-count="{{ maintenance_attention_count }}" aria-label="{{ maintenance_attention_count }} unresolved maintenance requests">{{ maintenance_attention_count }}</span>
-                {% endif %}
-            </a>
-            <a href="{{ url_for('update_contact') }}" class="btn secondary-action">Update contact</a>
-            <a href="{{ url_for('settings') }}" class="btn secondary-action">Payment destination</a>
-        </nav>
-    {% endif %}
-    
     {% with messages = get_flashed_messages() %}
       {% if messages %} <div class="flash">{{ messages[0] }}</div> {% endif %}
     {% endwith %}
@@ -102,11 +92,82 @@
             </div>
         </section>
 
+        <section class="attention-center" aria-labelledby="attention-center-title">
+            <header class="attention-center-heading">
+                <div>
+                    <p class="eyebrow">Daily workflow</p>
+                    <h2 id="attention-center-title">Needs attention</h2>
+                    <p class="muted">Your next actions, prioritized in one place.</p>
+                </div>
+                <span class="attention-total">{{ attention_count }} {{ 'item' if attention_count == 1 else 'items' }}</span>
+            </header>
+            <div class="attention-summary-grid">
+                <a href="#rent-followups" class="attention-summary-card">
+                    <span>Outstanding rent</span>
+                    <strong>{{ rent_followups|length }}</strong>
+                </a>
+                <a href="{{ url_for('maintenance_requests', status='open') }}" class="attention-summary-card">
+                    <span>Maintenance</span>
+                    <strong data-attention-count="{{ maintenance_attention_count }}">{{ maintenance_attention_count }}</strong>
+                </a>
+                <a href="#pending-applications" class="attention-summary-card">
+                    <span>Room applications</span>
+                    <strong>{{ room_requests|length }}</strong>
+                </a>
+                <a href="#portfolio-title" class="attention-summary-card">
+                    <span>Vacant rooms</span>
+                    <strong>{{ vacant_rooms }}</strong>
+                </a>
+            </div>
+            {% if rent_followups %}
+                <div class="attention-list" id="rent-followups">
+                    <h3>Rent follow-up</h3>
+                    {% for item in rent_followups[:5] %}
+                        <article class="attention-row">
+                            <div class="attention-row-details">
+                                <strong>{{ item.room.property.name }} · Room {{ item.room.room_number }}</strong>
+                                <span>{{ item.room.tenant.name or item.room.tenant.email }} · {{ item.period.label }}</span>
+                                <span class="attention-balance">Ksh {{ '%.2f'|format(item.balance) }} outstanding</span>
+                                {% if item.reminder %}
+                                    <small>Last reminder {{ item.reminder.created_at.strftime('%d %b %Y at %H:%M') }}</small>
+                                {% endif %}
+                            </div>
+                            <div class="attention-row-actions">
+                                <button type="button" class="btn secondary-action" data-copy-value="{{ item.message|e }}" data-copy-kind="reminder">Copy reminder</button>
+                                <form method="POST" action="{{ url_for('log_payment_reminder', room_id=item.room.id) }}">
+                                    <button type="submit" class="btn primary-action">Log sent</button>
+                                </form>
+                            </div>
+                        </article>
+                    {% endfor %}
+                    {% if rent_followups|length > 5 %}
+                        <p class="muted">Showing the 5 largest balances.</p>
+                    {% endif %}
+                </div>
+            {% endif %}
+            {% if maintenance_followups %}
+                <div class="attention-list">
+                    <h3>Maintenance follow-up</h3>
+                    {% for item in maintenance_followups %}
+                        <a class="attention-row attention-row-link" href="{{ url_for('maintenance_requests', status=item.status) }}">
+                            <span class="maintenance-priority maintenance-priority-{{ item.priority }}">{{ item.priority|title }}</span>
+                            <span class="attention-row-details">
+                                <strong>{{ item.title }}</strong>
+                                <span>{{ item.room.property.name }} · Room {{ item.room.room_number }} · {{ item.status.replace('_', ' ')|title }}</span>
+                            </span>
+                            <span aria-hidden="true">View</span>
+                        </a>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            <span class="attention-feedback" data-copy-feedback role="status" aria-live="polite"></span>
+        </section>
+
         <section class="property-card">
             <div class="section-heading">
                 <div>
                     <p class="eyebrow">Room applications</p>
-                    <h2>Pending room requests</h2>
+                    <h2 id="pending-applications">Pending room requests</h2>
                 </div>
                 {% if room_requests|length %}
                     <span class="attention-badge" data-attention-count="{{ room_requests|length }}" aria-label="{{ room_requests|length }} pending room requests">{{ room_requests|length }}</span>
@@ -195,7 +256,7 @@
         <div class="section-heading">
             <div>
                 <p class="eyebrow">Portfolio</p>
-                <h2>Your properties</h2>
+                <h2 id="portfolio-title">Your properties</h2>
             </div>
             <div class="portfolio-heading-actions">
                 <span class="count-badge">{{ properties|length }} {{ 'property' if properties|length == 1 else 'properties' }}</span>
@@ -566,8 +627,8 @@
                     const copied = document.execCommand('copy');
                     temporaryInput.remove();
                     if (copied) {
-                        showFeedback('Copied payment detail.');
-                        button.textContent = 'Copied';
+                        showFeedback(button.dataset.copyKind === 'reminder' ? 'Copied reminder message.' : 'Copied payment detail.');
+                        button.textContent = button.dataset.copyKind === 'reminder' ? 'Copied message' : 'Copied';
                     } else {
                         showFeedback('Could not copy. Please select and copy the number.');
                     }
@@ -578,8 +639,8 @@
                     return;
                 }
                 navigator.clipboard.writeText(value).then(function () {
-                    showFeedback('Copied payment detail.');
-                    button.textContent = 'Copied';
+                    showFeedback(button.dataset.copyKind === 'reminder' ? 'Copied reminder message.' : 'Copied payment detail.');
+                    button.textContent = button.dataset.copyKind === 'reminder' ? 'Copied message' : 'Copied';
                 }).catch(fallbackCopy);
             });
         });

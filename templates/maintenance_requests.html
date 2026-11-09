@@ -2,22 +2,27 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% include '_favicon.html' %}
     <title>Maintenance Requests - BomaManager</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
-<body>
+<body class="maintenance-page">
 <main class="container maintenance-requests-shell">
-    <header class="section-heading">
-        <p class="eyebrow">Property care</p>
-        <h1>Maintenance requests</h1>
-        <p class="muted">
-            {% if current_user.role == 'tenant' %}
-                Report an issue in your room and follow its progress.
-            {% else %}
-                Review tenant issues and update their status.
-            {% endif %}
-        </p>
+    {% include '_app_navigation.html' %}
+    <header class="maintenance-page-header">
+        <div class="maintenance-page-intro">
+            <p class="eyebrow">Property care</p>
+            <h1>Maintenance requests</h1>
+            <p class="muted">
+                {% if current_user.role == 'tenant' %}
+                    Report an issue in your room and follow its progress.
+                {% else %}
+                    Review tenant issues and update their status.
+                {% endif %}
+            </p>
+        </div>
+        <a class="maintenance-back-link" href="{{ url_for('dashboard') }}">Back to dashboard</a>
     </header>
 
     {% with messages = get_flashed_messages() %}
@@ -26,38 +31,80 @@
         {% endif %}
     {% endwith %}
 
+    <div class="maintenance-layout{% if current_user.role == 'tenant' and room %} maintenance-layout-tenant{% endif %}">
     {% if current_user.role == 'tenant' and room %}
-        <section class="property-card maintenance-form-card">
-            <h2>Report an issue</h2>
-            <p class="muted">{{ room.property.name }} · Room {{ room.room_number }}</p>
-            <form method="POST" class="maintenance-request-form">
+        <section class="maintenance-form-card">
+            <div class="maintenance-panel-heading">
+                <p class="eyebrow">Create a request</p>
+                <h2>Report an issue</h2>
+                <p class="muted">{{ room.property.name }} · Room {{ room.room_number }}</p>
+            </div>
+            <form method="POST" enctype="multipart/form-data" class="maintenance-request-form">
                 <label for="title">Issue</label>
                 <input id="title" name="title" maxlength="120" required placeholder="e.g. Leaking kitchen tap">
                 <label for="description">Description</label>
                 <textarea id="description" name="description" maxlength="2000" rows="5" required placeholder="Describe the issue and where it is happening"></textarea>
+                <label for="priority">Priority</label>
+                <select id="priority" name="priority">
+                    <option value="normal" selected>Normal</option>
+                    <option value="low">Low</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                </select>
+                <label for="photo">Photo <span class="muted">(optional, PNG/JPEG/WebP up to 5 MB)</span></label>
+                <input id="photo" name="photo" type="file" accept="image/png,image/jpeg,image/webp">
                 <button class="btn primary-action" type="submit">Send request</button>
             </form>
         </section>
     {% elif current_user.role == 'tenant' %}
-        <p class="empty-state">You need an assigned room before you can report a maintenance issue.</p>
+        <div class="maintenance-empty-room">
+            <strong>Room assignment needed</strong>
+            <p>You need an assigned room before you can report a maintenance issue.</p>
+        </div>
     {% endif %}
 
-    <section class="maintenance-request-list">
-        <h2>{% if current_user.role == 'tenant' %}Your reports{% else %}Tenant reports{% endif %}</h2>
+    <section class="maintenance-request-list" aria-labelledby="maintenance-list-title">
+        <header class="maintenance-section-heading">
+            <div>
+                <p class="eyebrow">{% if current_user.role == 'tenant' %}Request history{% else %}Property care{% endif %}</p>
+                <h2 id="maintenance-list-title">{% if current_user.role == 'tenant' %}Your reports{% else %}Tenant reports{% endif %}</h2>
+            </div>
+            <span class="maintenance-total">{{ maintenance_requests|length }} {{ 'request' if maintenance_requests|length == 1 else 'requests' }}</span>
+        </header>
+        <form method="GET" class="maintenance-filter-form">
+            <label for="maintenance-status-filter">Filter by status</label>
+            <select id="maintenance-status-filter" name="status" onchange="this.form.submit()">
+                <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All requests</option>
+                {% for value, label in statuses %}
+                    <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <noscript><button class="btn secondary-action" type="submit">Apply filter</button></noscript>
+        </form>
         {% if maintenance_requests %}
             {% for item in maintenance_requests %}
-                <article class="property-card maintenance-request-card">
+                <article class="maintenance-request-card">
                     <div class="maintenance-request-heading">
-                        <div>
+                        <div class="maintenance-request-main">
                             <h3>{{ item.title }}</h3>
-                            <p class="muted">{{ item.room.property.name }} · Room {{ item.room.room_number }} · Reported {{ item.created_at.strftime('%d %b %Y at %H:%M') }}</p>
+                            <div class="maintenance-request-meta">
+                                <span>{{ item.room.property.name }} · Room {{ item.room.room_number }}</span>
+                                <span>Reported {{ item.created_at.strftime('%d %b %Y at %H:%M') }}</span>
+                            </div>
                             {% if current_user.role == 'landlord' %}
-                                <p class="muted">Tenant: {{ item.tenant.name or item.tenant.email }}</p>
+                                <p class="maintenance-request-tenant">Tenant: {{ item.tenant.name or item.tenant.email }}</p>
                             {% endif %}
+                            <span class="maintenance-priority maintenance-priority-{{ item.priority }}">{{ item.priority|title }} priority</span>
                         </div>
-                        <span class="count-badge">{{ item.status.replace('_', ' ')|title }}</span>
+                        <span class="maintenance-status-badge maintenance-status-{{ item.status }}">{{ item.status.replace('_', ' ')|title }}</span>
                     </div>
                     <p class="maintenance-request-description">{{ item.description }}</p>
+                    {% if item.photo_path %}
+                        <a class="maintenance-photo-link" href="{{ url_for('maintenance_photo', request_id=item.id) }}" target="_blank" rel="noopener">
+                            <img src="{{ url_for('maintenance_photo', request_id=item.id) }}" alt="Photo attached to {{ item.title }}" loading="lazy">
+                            <span>View attached photo</span>
+                        </a>
+                    {% endif %}
                     {% if current_user.role == 'landlord' %}
                         <form method="POST" class="maintenance-status-form">
                             <input type="hidden" name="request_id" value="{{ item.id }}">
@@ -73,10 +120,10 @@
                 </article>
             {% endfor %}
         {% else %}
-            <p class="empty-state">No maintenance requests yet.</p>
+            <p class="maintenance-empty-state">No maintenance requests yet. New reports will appear here.</p>
         {% endif %}
     </section>
-    <p><a href="{{ url_for('dashboard') }}">Back to dashboard</a></p>
+    </div>
 </main>
 </body>
 </html>

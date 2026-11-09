@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% include '_favicon.html' %}
+    <title>Reports - BomaManager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+</head>
+<body class="reports-page">
+<main class="container reports-shell">
+    {% include '_app_navigation.html' %}
+    <header class="reports-header">
+        <div>
+            <p class="eyebrow">Portfolio insights</p>
+            <h1>Reports</h1>
+            <p class="muted">A clear view of collections, balances, occupancy, and property care.</p>
+        </div>
+        <a class="btn primary-action" href="{{ url_for('landlord_reports', export='csv') }}">Download CSV</a>
+    </header>
+
+    <section class="report-metrics" aria-label="Portfolio summary">
+        <article class="report-metric report-metric-highlight">
+            <span>Collected this month</span>
+            <strong>Ksh {{ '%.2f'|format(summary.collected_this_month) }}</strong>
+        </article>
+        <article class="report-metric">
+            <span>Outstanding balance</span>
+            <strong>Ksh {{ '%.2f'|format(summary.outstanding_total) }}</strong>
+        </article>
+        <article class="report-metric">
+            <span>Occupancy</span>
+            <strong>{{ summary.occupancy_rate }}%</strong>
+            <small>{{ summary.occupied_rooms }} of {{ summary.total_rooms }} rooms</small>
+        </article>
+        <article class="report-metric">
+            <span>Open maintenance</span>
+            <strong>{{ summary.open_maintenance }}</strong>
+            <small>{{ summary.resolved_maintenance }} resolved</small>
+        </article>
+    </section>
+
+    <section class="report-panel">
+        <header class="report-panel-heading">
+            <div>
+                <p class="eyebrow">Last six months</p>
+                <h2>Rent collections</h2>
+            </div>
+            <span class="muted">Based on recorded payments</span>
+        </header>
+        <div class="collection-report-list">
+            {% set max_total = monthly_rows|map(attribute='total')|max %}
+            {% for row in monthly_rows %}
+                <div class="collection-report-row">
+                    <span>{{ row.label }}</span>
+                    <div class="collection-report-track" aria-hidden="true">
+                        <span style="width: {{ ((row.total / max_total * 100) if max_total else 0)|round|int }}%"></span>
+                    </div>
+                    <strong>Ksh {{ '%.2f'|format(row.total) }}</strong>
+                </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="report-panel">
+        <header class="report-panel-heading">
+            <div>
+                <p class="eyebrow">Follow up</p>
+                <h2>Outstanding balances</h2>
+            </div>
+            <span class="report-count">{{ outstanding_rows|length }} rooms</span>
+        </header>
+        {% if outstanding_rows %}
+            <div class="report-table-wrap">
+                <table class="report-table">
+                    <thead>
+                        <tr><th>Property</th><th>Room</th><th>Tenant</th><th>Period</th><th>Balance</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for row in outstanding_rows %}
+                            <tr>
+                                <td data-label="Property">{{ row.room.property.name }}</td>
+                                <td data-label="Room">{{ row.room.room_number }}</td>
+                                <td data-label="Tenant">{{ row.room.tenant.name or row.room.tenant.email }}</td>
+                                <td data-label="Period">{{ row.period.key }}</td>
+                                <td data-label="Balance"><strong>Ksh {{ '%.2f'|format(row.balance) }}</strong></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="report-empty">All current tenant balances are up to date.</p>
+        {% endif %}
+    </section>
+</main>
+</body>
+</html>

@@ -1,5 +1,7 @@
 import sys
 import calendar
+import csv
+import io
 import os
 import re
 import secrets
@@ -13,7 +15,7 @@ try:
     import requests
     from sqlalchemy import inspect, or_
     from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-    from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
+    from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, send_from_directory
     from flask_sqlalchemy import SQLAlchemy
     from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
     from flask_bcrypt import Bcrypt
@@ -42,6 +44,8 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = APP_ENV == 'production'
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024 + 64 * 1024
+app.config['MAINTENANCE_UPLOAD_FOLDER'] = os.path.join(app.instance_path, 'maintenance_uploads')
 
 # GOOGLE OAUTH SETUP
 blueprint = make_google_blueprint(
@@ -235,12 +239,25 @@ class MaintenanceRequest(db.Model):
     title = db.Column(db.String(120), nullable=False)
     description = db.Column(db.Text, nullable=False)
     status = db.Column(db.String(20), nullable=False, default='open')
+    priority = db.Column(db.String(20), nullable=False, default='normal')
+    photo_path = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
     tenant_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     room = db.relationship('Room', backref='maintenance_requests')
     tenant = db.relationship('User', backref='maintenance_requests', foreign_keys=[tenant_id])
+
+class PaymentReminder(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
+    tenant_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    month = db.Column(db.String(20), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    channel = db.Column(db.String(20), nullable=False, default='manual')
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    room = db.relationship('Room', backref='payment_reminders')
+    tenant = db.relationship('User', backref='payment_reminders', foreign_keys=[tenant_id])
 
 def reject_pending_room_requests(room_id=None, tenant_id=None, except_request_id=None):
     filters = [RoomRequest.status == 'pending']
@@ -376,11 +393,25 @@ def ensure_property_columns():
             if name not in room_columns:
                 connection.exec_driver_sql(f'ALTER TABLE room ADD COLUMN {name} {column_type}')
 
+def ensure_maintenance_columns():
+    columns = {column['name'] for column in inspect(db.engine).get_columns('maintenance_request')}
+    additions = {
+        'priority': "VARCHAR(20) NOT NULL DEFAULT 'normal'",
+        'photo_path': 'VARCHAR(255)',
+    }
+    with db.engine.begin() as connection:
+        for name, column_type in additions.items():
+            if name not in columns:
+                connection.exec_driver_sql(
+                    f'ALTER TABLE maintenance_request ADD COLUMN {name} {column_type}'
+                )
+
 
 def initialize_database():
     db.create_all()
     ensure_user_columns()
     ensure_property_columns()
+    ensure_maintenance_columns()
 
 
 with app.app_context():
@@ -831,6 +862,13 @@ def dashboard():
         water_bills = {bill.room_id: bill for bill in WaterBill.query.filter(WaterBill.month.in_(period_keys)).all()} if period_keys else {}
         pending_bills_by_room = {bill.room_id: bill for bill in PendingBill.query.filter(PendingBill.month.in_(period_keys)).all()} if period_keys else {}
         payments_by_room = {room_id: get_payment_summary(room, current_period_by_room[room_id]['key']) for room_id, room in [(room.id, room) for prop in properties for room in prop.rooms] if current_period_by_room[room_id]}
+        room_ids = [room.id for prop in properties for room in prop.rooms]
+        recent_reminders = PaymentReminder.query.filter(
+            PaymentReminder.room_id.in_(room_ids),
+        ).order_by(PaymentReminder.created_at.desc()).limit(500).all() if room_ids else []
+        latest_reminder_by_room = {}
+        for reminder in recent_reminders:
+            latest_reminder_by_room.setdefault((reminder.room_id, reminder.month), reminder)
         now = datetime.utcnow()
         month_start = datetime(now.year, now.month, 1)
         next_month = datetime(now.year + (now.month == 12), now.month % 12 + 1, 1)
@@ -851,6 +889,37 @@ def dashboard():
                 or payments_by_room[room.id]['balance'] > 0
             )
         )
+        rent_followups = []
+        for room in landlord_rooms:
+            period = current_period_by_room.get(room.id)
+            summary = payments_by_room.get(room.id)
+            if room.tenant and period and summary and summary['balance'] > 0:
+                rent_followups.append({
+                    'room': room,
+                    'period': period,
+                    'balance': summary['balance'],
+                    'reminder': latest_reminder_by_room.get((room.id, period['key'])),
+                    'message': (
+                        f"Hello {room.tenant.name or room.tenant.email}, a friendly reminder "
+                        f"that Ksh {summary['balance']:.2f} is outstanding for Room "
+                        f"{room.room_number} at {room.property.name} "
+                        f"({period['label']}). Please let me know when payment is complete. "
+                        "Thank you."
+                    ),
+                })
+        rent_followups.sort(key=lambda item: item['balance'], reverse=True)
+        maintenance_followups = MaintenanceRequest.query.join(Room).join(Property).filter(
+            Property.landlord_id == current_user.id,
+            MaintenanceRequest.status.in_(('open', 'in_progress')),
+        ).order_by(MaintenanceRequest.created_at.asc()).all()
+        priority_order = {'urgent': 0, 'high': 1, 'normal': 2, 'low': 3}
+        maintenance_followups.sort(
+            key=lambda item: (
+                priority_order.get(item.priority, 2),
+                item.created_at,
+            )
+        )
+        maintenance_followups = maintenance_followups[:5]
         paid_rooms = sum(
             1
             for room in landlord_rooms
@@ -860,7 +929,32 @@ def dashboard():
         )
         subscription_deadline = current_user.subscription_deadline()
         subscription_countdown = get_countdown_parts(subscription_deadline)
-        return render_template('dashboard.html', properties=properties, tenants=tenants, room_requests=room_requests, maintenance_attention_count=maintenance_attention_count, vacant_rooms=vacant_rooms, rent_due_rooms=rent_due_rooms, paid_rooms=paid_rooms, room=None, payment_status=None, water_bills=water_bills, pending_bills_by_room=pending_bills_by_room, payments_by_room=payments_by_room, current_period_by_room=current_period_by_room, total_month_collection=total_month_collection, total_rooms=total_rooms, occupied_rooms=occupied_rooms, current_month_label=datetime.now().strftime('%B %Y'), subscription_deadline=subscription_deadline, subscription_countdown=subscription_countdown)
+        attention_count = len(rent_followups) + len(room_requests) + maintenance_attention_count + vacant_rooms
+        return render_template(
+            'dashboard.html',
+            properties=properties,
+            tenants=tenants,
+            room_requests=room_requests,
+            maintenance_attention_count=maintenance_attention_count,
+            maintenance_followups=maintenance_followups,
+            rent_followups=rent_followups,
+            attention_count=attention_count,
+            vacant_rooms=vacant_rooms,
+            rent_due_rooms=rent_due_rooms,
+            paid_rooms=paid_rooms,
+            room=None,
+            payment_status=None,
+            water_bills=water_bills,
+            pending_bills_by_room=pending_bills_by_room,
+            payments_by_room=payments_by_room,
+            current_period_by_room=current_period_by_room,
+            total_month_collection=total_month_collection,
+            total_rooms=total_rooms,
+            occupied_rooms=occupied_rooms,
+            current_month_label=datetime.now().strftime('%B %Y'),
+            subscription_deadline=subscription_deadline,
+            subscription_countdown=subscription_countdown,
+        )
     else:
         properties = None
         room = None
@@ -940,6 +1034,11 @@ def dashboard():
 @app.route('/maintenance-requests', methods=['GET', 'POST'])
 @login_required
 def maintenance_requests():
+    statuses = [
+        ('open', 'Open'),
+        ('in_progress', 'In progress'),
+        ('resolved', 'Resolved'),
+    ]
     if current_user.role == 'tenant':
         if request.method == 'POST' and 'request_id' in request.form:
             return "Access Denied", 403
@@ -947,14 +1046,66 @@ def maintenance_requests():
         if request.method == 'POST':
             title = request.form.get('title', '').strip()
             description = request.form.get('description', '').strip()
+            priority = request.form.get('priority', 'normal')
+            photo = request.files.get('photo')
             if not room:
                 flash('You need an assigned room to report a maintenance issue.', 'warning')
             elif not title or len(title) > 120 or not description or len(description) > 2000:
                 flash('Enter a title (up to 120 characters) and description (up to 2,000 characters).', 'warning')
+            elif priority not in {'low', 'normal', 'high', 'urgent'}:
+                flash('Choose a valid maintenance priority.', 'warning')
             else:
+                photo_path = None
+                if photo and photo.filename:
+                    extension = os.path.splitext(photo.filename)[1].lower()
+                    image_bytes = photo.stream.read(5 * 1024 * 1024 + 1)
+                    signatures = {
+                        '.png': image_bytes.startswith(b'\x89PNG\r\n\x1a\n'),
+                        '.jpg': image_bytes.startswith(b'\xff\xd8\xff'),
+                        '.jpeg': image_bytes.startswith(b'\xff\xd8\xff'),
+                        '.webp': (
+                            len(image_bytes) >= 12
+                            and image_bytes[:4] == b'RIFF'
+                            and image_bytes[8:12] == b'WEBP'
+                        ),
+                    }
+                    if len(image_bytes) > 5 * 1024 * 1024 or not signatures.get(extension, False):
+                        flash('Attach a valid PNG, JPEG, or WebP image up to 5 MB.', 'warning')
+                        requests_list = MaintenanceRequest.query.filter_by(
+                            tenant_id=current_user.id,
+                        ).order_by(MaintenanceRequest.created_at.desc()).all()
+                        return render_template(
+                            'maintenance_requests.html',
+                            room=room,
+                            maintenance_requests=requests_list,
+                            statuses=statuses,
+                            status_filter='all',
+                        )
+                    upload_directory = app.config['MAINTENANCE_UPLOAD_FOLDER']
+                    os.makedirs(upload_directory, exist_ok=True)
+                    filename = f'{secrets.token_hex(16)}{extension}'
+                    try:
+                        with open(os.path.join(upload_directory, filename), 'wb') as image_file:
+                            image_file.write(image_bytes)
+                    except OSError:
+                        app.logger.exception('Could not save maintenance photo for tenant %s.', current_user.id)
+                        flash('The photo could not be saved. Please try again.', 'warning')
+                        requests_list = MaintenanceRequest.query.filter_by(
+                            tenant_id=current_user.id,
+                        ).order_by(MaintenanceRequest.created_at.desc()).all()
+                        return render_template(
+                            'maintenance_requests.html',
+                            room=room,
+                            maintenance_requests=requests_list,
+                            statuses=statuses,
+                            status_filter='all',
+                        )
+                    photo_path = filename
                 maintenance_request = MaintenanceRequest(
                     title=title,
                     description=description,
+                    priority=priority,
+                    photo_path=photo_path,
                     room_id=room.id,
                     tenant_id=current_user.id,
                 )
@@ -962,14 +1113,21 @@ def maintenance_requests():
                 db.session.commit()
                 flash('Your maintenance request has been sent to your landlord.', 'success')
                 return redirect(url_for('maintenance_requests'))
-        requests_list = MaintenanceRequest.query.filter_by(
+        status_filter = request.args.get('status', 'all')
+        query = MaintenanceRequest.query.filter_by(
             tenant_id=current_user.id,
-        ).order_by(MaintenanceRequest.created_at.desc()).all()
+        )
+        if status_filter not in {'all', *(value for value, _ in statuses)}:
+            status_filter = 'all'
+        if status_filter != 'all':
+            query = query.filter_by(status=status_filter)
+        requests_list = query.order_by(MaintenanceRequest.created_at.desc()).all()
         return render_template(
             'maintenance_requests.html',
             room=room,
             maintenance_requests=requests_list,
-            statuses=None,
+            statuses=statuses,
+            status_filter=status_filter,
         )
 
     if current_user.role != 'landlord':
@@ -994,21 +1152,184 @@ def maintenance_requests():
             flash('Maintenance request status updated.', 'success')
         return redirect(url_for('maintenance_requests'))
 
-    requests_list = MaintenanceRequest.query.join(Room).join(Property).filter(
+    status_filter = request.args.get('status', 'all')
+    if status_filter not in {'all', *(value for value, _ in statuses)}:
+        status_filter = 'all'
+    query = MaintenanceRequest.query.join(Room).join(Property).filter(
         Property.landlord_id == current_user.id,
-    ).order_by(
-        MaintenanceRequest.created_at.desc(),
-    ).all()
+    )
+    if status_filter != 'all':
+        query = query.filter(MaintenanceRequest.status == status_filter)
+    requests_list = query.order_by(MaintenanceRequest.created_at.desc()).all()
     return render_template(
         'maintenance_requests.html',
         room=None,
         maintenance_requests=requests_list,
-        statuses=[
-            ('open', 'Open'),
-            ('in_progress', 'In progress'),
-            ('resolved', 'Resolved'),
-        ],
+        statuses=statuses,
+        status_filter=status_filter,
     )
+
+@app.route('/payment-reminders/<int:room_id>', methods=['POST'])
+@login_required
+@subscription_required
+def log_payment_reminder(room_id):
+    if current_user.role != 'landlord':
+        return "Access Denied", 403
+    room = Room.query.join(Property).filter(
+        Room.id == room_id,
+        Property.landlord_id == current_user.id,
+    ).first_or_404()
+    period = get_billing_period(room)
+    if not room.tenant or not period:
+        flash('This room does not have a tenant with a current billing period.', 'warning')
+        return redirect(url_for('dashboard'))
+    summary = get_payment_summary(room, period['key'])
+    if summary['balance'] <= 0:
+        flash('There is no outstanding balance to remind this tenant about.', 'warning')
+        return redirect(url_for('dashboard'))
+    db.session.add(PaymentReminder(
+        room_id=room.id,
+        tenant_id=room.tenant.id,
+        month=period['key'],
+        amount=summary['balance'],
+        channel='manual',
+    ))
+    db.session.commit()
+    flash('Manual reminder recorded. No message was sent by BomaManager.', 'success')
+    return redirect(url_for('dashboard'))
+
+@app.route('/reports')
+@login_required
+@subscription_required
+def landlord_reports():
+    if current_user.role != 'landlord':
+        return "Access Denied", 403
+    properties = Property.query.filter_by(landlord_id=current_user.id).all()
+    rooms = [room for prop in properties for room in prop.rooms]
+    month_start = date.today().replace(day=1)
+    first_month = add_months(month_start, -5)
+    date_start = datetime.combine(first_month, datetime.min.time())
+    date_end = datetime.combine(add_months(month_start, 1), datetime.min.time())
+    payments = Payment.query.join(Room).join(Property).filter(
+        Property.landlord_id == current_user.id,
+        Payment.date_paid >= date_start,
+        Payment.date_paid < date_end,
+    ).order_by(Payment.date_paid.desc()).all()
+    monthly_totals = {}
+    for offset in range(6):
+        month_date = add_months(first_month, offset)
+        monthly_totals[month_date.strftime('%Y-%m')] = 0.0
+    for payment in payments:
+        key = payment.date_paid.strftime('%Y-%m')
+        monthly_totals[key] = monthly_totals.get(key, 0) + payment.amount
+
+    outstanding_rows = []
+    outstanding_total = 0.0
+    for room in rooms:
+        period = get_billing_period(room)
+        if not room.tenant or not period:
+            continue
+        summary = get_payment_summary(room, period['key'])
+        if summary['balance'] > 0:
+            outstanding_total += summary['balance']
+            outstanding_rows.append({
+                'room': room,
+                'period': period,
+                'balance': summary['balance'],
+            })
+    outstanding_rows.sort(key=lambda row: row['balance'], reverse=True)
+
+    occupied_rooms = sum(1 for room in rooms if room.tenant)
+    open_maintenance = MaintenanceRequest.query.join(Room).join(Property).filter(
+        Property.landlord_id == current_user.id,
+        MaintenanceRequest.status.in_(('open', 'in_progress')),
+    ).count()
+    resolved_maintenance = MaintenanceRequest.query.join(Room).join(Property).filter(
+        Property.landlord_id == current_user.id,
+        MaintenanceRequest.status == 'resolved',
+    ).count()
+    summary = {
+        'collected_this_month': monthly_totals.get(month_start.strftime('%Y-%m'), 0),
+        'outstanding_total': outstanding_total,
+        'occupied_rooms': occupied_rooms,
+        'total_rooms': len(rooms),
+        'occupancy_rate': round(occupied_rooms / len(rooms) * 100) if rooms else 0,
+        'open_maintenance': open_maintenance,
+        'resolved_maintenance': resolved_maintenance,
+    }
+
+    if request.args.get('export') == 'csv':
+        output = io.StringIO()
+        writer = csv.writer(output)
+        def csv_text(value):
+            text = str(value or '')
+            if text.startswith(('=', '+', '-', '@', '\t', '\r')):
+                return "'" + text
+            return text
+
+        writer.writerow(['BomaManager landlord report', date.today().isoformat()])
+        writer.writerow(['Metric', 'Value'])
+        writer.writerow(['Collected this month (Ksh)', f"{summary['collected_this_month']:.2f}"])
+        writer.writerow(['Outstanding balance (Ksh)', f"{summary['outstanding_total']:.2f}"])
+        writer.writerow(['Occupancy (%)', summary['occupancy_rate']])
+        writer.writerow(['Occupied rooms', summary['occupied_rooms']])
+        writer.writerow(['Total rooms', summary['total_rooms']])
+        writer.writerow(['Open maintenance requests', summary['open_maintenance']])
+        writer.writerow(['Resolved maintenance requests', summary['resolved_maintenance']])
+        writer.writerow([])
+        writer.writerow(['Outstanding balances'])
+        writer.writerow(['Property', 'Room', 'Tenant', 'Billing period', 'Balance (Ksh)'])
+        for row in outstanding_rows:
+            writer.writerow([
+                csv_text(row['room'].property.name),
+                csv_text(row['room'].room_number),
+                csv_text(row['room'].tenant.name or row['room'].tenant.email),
+                csv_text(row['period']['key']),
+                f"{row['balance']:.2f}",
+            ])
+        writer.writerow([])
+        writer.writerow(['Monthly collections'])
+        writer.writerow(['Month', 'Collected (Ksh)'])
+        for month, total in monthly_totals.items():
+            writer.writerow([month, f'{total:.2f}'])
+        response = app.response_class(output.getvalue(), mimetype='text/csv')
+        response.headers['Content-Disposition'] = 'attachment; filename=bomamanager-report.csv'
+        return response
+
+    monthly_rows = [
+        {'month': month, 'label': datetime.strptime(month, '%Y-%m').strftime('%b %Y'), 'total': total}
+        for month, total in monthly_totals.items()
+    ]
+    return render_template(
+        'reports.html',
+        summary=summary,
+        monthly_rows=monthly_rows,
+        outstanding_rows=outstanding_rows,
+    )
+
+@app.route('/maintenance-photos/<int:request_id>')
+@login_required
+def maintenance_photo(request_id):
+    item = MaintenanceRequest.query.join(Room).join(Property).filter(
+        MaintenanceRequest.id == request_id,
+    ).first_or_404()
+    if current_user.role == 'tenant':
+        if item.tenant_id != current_user.id:
+            return "Access Denied", 403
+    elif current_user.role == 'landlord':
+        if item.room.property.landlord_id != current_user.id:
+            return "Access Denied", 403
+    else:
+        return "Access Denied", 403
+    if not item.photo_path:
+        return "Photo Not Found", 404
+    response = send_from_directory(
+        app.config['MAINTENANCE_UPLOAD_FOLDER'],
+        item.photo_path,
+        conditional=True,
+    )
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
 
 @app.route('/rooms/<int:room_id>/request', methods=['POST'])
 @login_required
@@ -1786,6 +2107,9 @@ def payment_history():
         properties = Property.query.filter_by(landlord_id=current_user.id).all()
         room_ids = [r.id for p in properties for r in p.rooms]
         payments = Payment.query.filter(Payment.room_id.in_(room_ids)).order_by(Payment.date_paid.desc()).all() if room_ids else []
+        reminders = PaymentReminder.query.filter(
+            PaymentReminder.room_id.in_(room_ids),
+        ).order_by(PaymentReminder.created_at.desc()).limit(100).all() if room_ids else []
         payment_rows = []
         monthly_collections = {}
         for payment in payments:
@@ -1801,7 +2125,13 @@ def payment_history():
             }
             payment_rows.append(row)
             monthly_collections[payment.month] = monthly_collections.get(payment.month, 0) + payment.amount
-        return render_template('payment_history.html', payments=payments, payment_rows=payment_rows, monthly_collections=monthly_collections)
+        return render_template(
+            'payment_history.html',
+            payments=payments,
+            payment_rows=payment_rows,
+            monthly_collections=monthly_collections,
+            reminders=reminders,
+        )
     else:
         payments = Payment.query.filter_by(tenant_id=current_user.id).order_by(Payment.date_paid.desc()).all()
     return render_template('payment_history.html', payments=payments)

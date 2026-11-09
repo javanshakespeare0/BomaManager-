@@ -2,11 +2,13 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% include '_favicon.html' %}
     <title>Add Room - BomaManager</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
 <body>
+{% include '_app_navigation.html' %}
 <div class="container">
     <h1>{{ 'Edit Room' if room else 'Add Room' }} {{ 'in ' + prop.name if room else 'to ' + prop.name }}</h1>
     <form method="POST">
