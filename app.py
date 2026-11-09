@@ -50,7 +50,12 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = APP_ENV == 'production'
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024 + 64 * 1024
-app.config['MAINTENANCE_UPLOAD_FOLDER'] = os.path.join(app.instance_path, 'maintenance_uploads')
+app.config['MAINTENANCE_UPLOAD_FOLDER'] = os.path.abspath(
+    os.getenv(
+        'MAINTENANCE_UPLOAD_FOLDER',
+        os.path.join(app.instance_path, 'maintenance_uploads'),
+    )
+)
 
 # GOOGLE OAUTH SETUP
 blueprint = make_google_blueprint(
@@ -1197,9 +1202,9 @@ def maintenance_requests():
                             status_filter='all',
                         )
                     upload_directory = app.config['MAINTENANCE_UPLOAD_FOLDER']
-                    os.makedirs(upload_directory, exist_ok=True)
                     filename = f'{secrets.token_hex(16)}{extension}'
                     try:
+                        os.makedirs(upload_directory, exist_ok=True)
                         with open(os.path.join(upload_directory, filename), 'wb') as image_file:
                             image_file.write(image_bytes)
                     except OSError:
@@ -1689,6 +1694,16 @@ def maintenance_photo(request_id):
         return "Access Denied", 403
     if not item.photo_path:
         return "Photo Not Found", 404
+    photo_path = os.path.join(app.config['MAINTENANCE_UPLOAD_FOLDER'], item.photo_path)
+    if not os.path.isfile(photo_path):
+        app.logger.warning(
+            'Maintenance photo file is missing for request %s. Check that MAINTENANCE_UPLOAD_FOLDER points to persistent storage.',
+            item.id,
+        )
+        abort(
+            404,
+            description='This maintenance photo is missing from server storage. Configure persistent upload storage to prevent this.',
+        )
     response = send_from_directory(
         app.config['MAINTENANCE_UPLOAD_FOLDER'],
         item.photo_path,

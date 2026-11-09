@@ -316,6 +316,41 @@ class ProductivityFeatureTests(unittest.TestCase):
         self.assertEqual(photo_response.headers.get('X-Content-Type-Options'), 'nosniff')
         photo_response.close()
 
+        self.login_as(self.landlord_id)
+        status_response = self.client.post('/maintenance-requests', data={
+            'request_id': str(item_id),
+            'status': 'resolved',
+        })
+        self.assertEqual(status_response.status_code, 302)
+        with app.app_context():
+            resolved_request = db.session.get(MaintenanceRequest, item_id)
+            self.assertEqual(resolved_request.status, 'resolved')
+            self.assertTrue(os.path.isfile(
+                os.path.join(self.uploads.name, resolved_request.photo_path)
+            ))
+        resolved_photo_response = self.client.get(f'/maintenance-photos/{item_id}')
+        self.assertEqual(resolved_photo_response.status_code, 200)
+        resolved_photo_response.close()
+
+    def test_missing_maintenance_photo_returns_actionable_error(self):
+        with app.app_context():
+            item = MaintenanceRequest(
+                title='Missing photo',
+                description='The stored image is no longer available.',
+                photo_path='missing.png',
+                room_id=self.room_id,
+                tenant_id=self.tenant_id,
+            )
+            db.session.add(item)
+            db.session.commit()
+            item_id = item.id
+        self.login_as(self.tenant_id)
+
+        response = self.client.get(f'/maintenance-photos/{item_id}')
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn(b'Configure persistent upload storage', response.data)
+
     def test_maintenance_upload_rejects_non_image_payload(self):
         self.login_as(self.tenant_id)
 
