@@ -41,10 +41,10 @@
     {% else %}
         <div class="property-card">
             <h3>Pay with M-Pesa</h3>
-            <p>Enter your phone number and you will receive an STK Push to authorize the payment. The payment is received through the platform and forwarded to the landlord's configured destination.</p>
+            <p>Enter your phone number to receive an STK Push from BomaManager's configured M-Pesa shortcode. The payment will be recorded for this billing period after M-Pesa confirms it.</p>
             <form method="POST" action="{{ url_for('stk_push', room_id=room.id) }}">
                 <label for="amount">Amount to pay (Ksh)</label>
-                <input type="number" name="amount" id="amount" min="1" max="{{ balance }}" step="0.01" placeholder="Up to Ksh {{ balance }}" required>
+                <input type="number" name="amount" id="amount" min="1" max="{{ balance }}" step="1" placeholder="Up to Ksh {{ balance }}" required>
                 <label for="phone">M-Pesa Phone Number</label>
                 <input type="text" name="phone" id="phone" placeholder="07XXXXXXXX or 01XXXXXXXX" required>
                 <small>Format: 07XXXXXXXX or 01XXXXXXXX. We will convert to 254...</small>

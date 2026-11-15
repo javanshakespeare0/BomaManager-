@@ -5,9 +5,11 @@ import io
 import os
 import re
 import secrets
-from mpesa import stk_push2
+from mpesa import DARAJA_ENV, stk_push2
 from datetime import datetime, date, timedelta
+from decimal import Decimal, InvalidOperation
 from functools import wraps
+from urllib.parse import urlsplit
 from openpyxl import Workbook
 from openpyxl.formatting.rule import CellIsRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -70,7 +72,10 @@ app.register_blueprint(blueprint, url_prefix="/login")
 # environment; the defaults keep the existing sandbox setup usable locally.
 CONSUMER_KEY = os.getenv('MPESA_CONSUMER_KEY', '')
 CONSUMER_SECRET = os.getenv('MPESA_CONSUMER_SECRET', '')
-BUSINESS_SHORTCODE = os.getenv('MPESA_BUSINESS_SHORTCODE', '174379')
+BUSINESS_SHORTCODE = os.getenv(
+    'MPESA_BUSINESS_SHORTCODE',
+    '174379' if DARAJA_ENV == 'sandbox' else '',
+)
 PASSKEY = os.getenv('MPESA_PASSKEY', '')
 CALLBACK_URL = os.getenv('MPESA_CALLBACK_URL', 'https://your-public-domain.example/api/mpesa/callback')
 SUBSCRIPTION_CALLBACK_URL = os.getenv(
@@ -457,7 +462,15 @@ def format_phone(phone):
 
 
 def valid_callback_url(callback_url):
-    return bool(callback_url) and callback_url.startswith('https://') and 'your-public-domain.example' not in callback_url
+    try:
+        parsed_url = urlsplit(callback_url or '')
+        return (
+            parsed_url.scheme == 'https'
+            and bool(parsed_url.hostname)
+            and 'your-public-domain.example' not in parsed_url.hostname
+        )
+    except (TypeError, ValueError):
+        return False
 
 
 def get_countdown_parts(target_datetime):
@@ -2351,19 +2364,28 @@ def stk_push(room_id):
     summary = get_payment_summary(room, current_period['key'])
     
     try:
-        requested_amount = float(request.form['amount'])
-    except (KeyError, TypeError, ValueError):
+        requested_amount = Decimal(request.form['amount'])
+    except (KeyError, TypeError, InvalidOperation, ValueError):
         flash('Enter a valid payment amount.')
         return redirect(url_for('pay_rent', room_id=room_id))
-    
-    if requested_amount <= 0 or requested_amount > summary['balance']:
+    if (
+        not requested_amount.is_finite()
+        or requested_amount <= 0
+        or requested_amount != requested_amount.to_integral_value()
+        or requested_amount > Decimal(str(summary['balance']))
+    ):
         flash(f'Enter an amount between Ksh 1 and Ksh {summary["balance"]:.2f}.')
         return redirect(url_for('pay_rent', room_id=room_id))
+    requested_amount = int(requested_amount)
 
     raw_phone = request.form.get('phone', '')
     phone = format_phone(raw_phone)
-    if not re.fullmatch(r'254(?:7|1)\d{8}', phone):
+    if not phone or not re.fullmatch(r'254(?:7|1)\d{8}', phone):
         flash("Invalid phone number. Use 07XXXXXXXX or 01XXXXXXXX")
+        return redirect(url_for('pay_rent', room_id=room_id))
+
+    if not all((PASSKEY, CONSUMER_KEY, CONSUMER_SECRET, BUSINESS_SHORTCODE)):
+        flash('M-Pesa is not configured yet. Set the Daraja credentials in the environment.')
         return redirect(url_for('pay_rent', room_id=room_id))
 
     if not valid_callback_url(CALLBACK_URL):
@@ -2393,19 +2415,30 @@ def stk_push(room_id):
 
     if str(data.get('ResponseCode')) == '0':
         checkout_request_id = data.get('CheckoutRequestID')
-        if not checkout_request_id:
+        if not isinstance(checkout_request_id, str) or not checkout_request_id.strip():
             app.logger.error('Daraja accepted STK request without CheckoutRequestID: %s', data)
             flash('M-Pesa did not return a valid checkout reference. Please try again.')
             return redirect(url_for('pay_rent', room_id=room_id))
-        db.session.add(PaymentAttempt(
-            checkout_request_id=checkout_request_id,
-            room_id=room.id,
-            tenant_id=room.tenant_id,
-            month=current_period['key'],
-            amount=requested_amount,
-        ))
-        db.session.commit()
-        flash(f"STK Push sent to {phone}. Check phone to pay Ksh {requested_amount}. Money will be forwarded to landlord's {landlord.mpesa_type}: {landlord.mpesa_till}")
+        try:
+            db.session.add(PaymentAttempt(
+                checkout_request_id=checkout_request_id,
+                room_id=room.id,
+                tenant_id=room.tenant_id,
+                month=current_period['key'],
+                amount=requested_amount,
+            ))
+            db.session.commit()
+        except SQLAlchemyError:
+            db.session.rollback()
+            app.logger.exception(
+                'Could not track rent STK attempt %s for tenant %s and room %s',
+                checkout_request_id,
+                current_user.id,
+                room.id,
+            )
+            flash('M-Pesa accepted the prompt, but confirmation tracking failed. Contact support before retrying.')
+            return redirect(url_for('dashboard'))
+        flash(f'STK Push sent to {phone} for Ksh {requested_amount}. Once M-Pesa confirms it, the payment will be recorded for this billing period.')
     else:
         message = data.get('errorMessage') or data.get('ResponseDescription') or 'M-Pesa rejected the request.'
         flash(f"STK failed: {message}")
@@ -2464,15 +2497,15 @@ def mpesa_callback():
     amount = metadata.get('Amount')
     mpesa_code = metadata.get('MpesaReceiptNumber')
     try:
-        payment_amount = float(amount)
-    except (TypeError, ValueError):
+        payment_amount = Decimal(str(amount))
+    except (InvalidOperation, TypeError, ValueError):
         app.logger.warning('Ignoring STK callback with invalid amount for %s.', checkout_request_id)
         return jsonify(accepted)
 
     if (
-        payment_amount <= 0
-        or not payment_amount.is_integer()
-        or int(payment_amount) != int(attempt.amount)
+        not payment_amount.is_finite()
+        or payment_amount <= 0
+        or payment_amount != Decimal(str(attempt.amount))
         or not isinstance(mpesa_code, str)
         or not mpesa_code.strip()
     ):
@@ -2486,7 +2519,7 @@ def mpesa_callback():
         return jsonify(accepted)
 
     payment = Payment(
-        amount=payment_amount,
+        amount=float(payment_amount),
         month=attempt.month,
         room_id=attempt.room_id,
         tenant_id=attempt.tenant_id,
@@ -2498,6 +2531,7 @@ def mpesa_callback():
     except SQLAlchemyError:
         db.session.rollback()
         app.logger.exception('Could not save M-Pesa payment for STK attempt %s.', checkout_request_id)
+        return jsonify({"ResultCode": 1, "ResultDesc": "Payment processing failed"}), 500
     else:
         app.logger.info(
             'Saved M-Pesa payment %s for STK attempt %s.',
@@ -2570,6 +2604,9 @@ def subscription_page():
 @app.route('/pay-subscription', methods=['POST'])
 @login_required
 def pay_subscription():
+    if current_user.role != 'landlord':
+        flash('Only landlord accounts can purchase a subscription.', 'danger')
+        return redirect(url_for('subscription_page'))
     plan = request.form.get('plan', 'basic')
     if plan not in {'basic', 'pro'}:
         flash('Choose a valid subscription plan.', 'danger')
@@ -2591,7 +2628,7 @@ def pay_subscription():
 
     amount = 500 if plan == 'basic' else 1000
 
-    if not PASSKEY or not CONSUMER_KEY or not CONSUMER_SECRET:
+    if not all((PASSKEY, CONSUMER_KEY, CONSUMER_SECRET, BUSINESS_SHORTCODE)):
         flash('M-Pesa is not configured yet. Set the Daraja credentials in the environment.', 'danger')
         return redirect(url_for('subscription_page'))
 
@@ -2620,7 +2657,7 @@ def pay_subscription():
         return redirect(url_for('subscription_page'))
     if str(response_data.get('ResponseCode')) == '0':
         checkout_request_id = response_data.get('CheckoutRequestID')
-        if not checkout_request_id:
+        if not isinstance(checkout_request_id, str) or not checkout_request_id.strip():
             app.logger.error(
                 'Daraja accepted subscription payment for landlord %s without a CheckoutRequestID',
                 current_user.id,
@@ -2723,6 +2760,43 @@ def subscription_callback():
             )
             return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
 
+        callback_metadata = cb.get('CallbackMetadata')
+        items = callback_metadata.get('Item') if isinstance(callback_metadata, dict) else None
+        if not isinstance(items, list):
+            app.logger.error(
+                'Subscription callback for checkout %s did not include payment metadata',
+                checkout_request_id,
+            )
+            attempt.outcome = 'rejected'
+            attempt.processed_at = datetime.utcnow()
+            db.session.commit()
+            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
+        metadata = {
+            item['Name']: item.get('Value')
+            for item in items
+            if isinstance(item, dict) and isinstance(item.get('Name'), str)
+        }
+        try:
+            paid_amount = Decimal(str(metadata.get('Amount')))
+        except (InvalidOperation, TypeError, ValueError):
+            paid_amount = Decimal('NaN')
+        expected_amount = Decimal('500' if attempt.plan == 'basic' else '1000')
+        receipt = metadata.get('MpesaReceiptNumber')
+        if (
+            not paid_amount.is_finite()
+            or paid_amount != expected_amount
+            or not isinstance(receipt, str)
+            or not receipt.strip()
+        ):
+            app.logger.error(
+                'Rejected subscription callback with invalid payment details for checkout %s',
+                checkout_request_id,
+            )
+            attempt.outcome = 'rejected'
+            attempt.processed_at = datetime.utcnow()
+            db.session.commit()
+            return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
+
         if (
             landlord.subscription_admin_updated_at
             and attempt.requested_at <= landlord.subscription_admin_updated_at
@@ -2764,6 +2838,7 @@ def subscription_callback():
     except SQLAlchemyError:
         db.session.rollback()
         app.logger.exception('Database error processing subscription callback')
+        return jsonify({"ResultCode": 1, "ResultDesc": "Payment processing failed"}), 500
     return jsonify({"ResultCode": 0, "ResultDesc": "Accepted"})
 @app.route('/logout')
 @login_required
