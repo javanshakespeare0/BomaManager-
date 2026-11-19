@@ -256,7 +256,7 @@ def reset_landlord_password(user_id):
 @admin_bp.route('/admin/landlord/<int:user_id>/delete', methods=['POST'])
 @admin_required
 def delete_landlord(user_id):
-    from app import AuditLog, Payment, PendingBill, Property, Room, User, WaterBill, db
+    from app import AuditLog, Payment, PaymentProof, PendingBill, Property, Room, User, WaterBill, db
 
     landlord = User.query.filter_by(id=user_id, role='landlord').first_or_404()
     properties = Property.query.filter_by(landlord_id=landlord.id).all()
@@ -265,6 +265,7 @@ def delete_landlord(user_id):
 
     if room_ids:
         Payment.query.filter(Payment.room_id.in_(room_ids)).delete(synchronize_session=False)
+        PaymentProof.query.filter(PaymentProof.room_id.in_(room_ids)).delete(synchronize_session=False)
         WaterBill.query.filter(WaterBill.room_id.in_(room_ids)).delete(synchronize_session=False)
         PendingBill.query.filter(PendingBill.room_id.in_(room_ids)).delete(synchronize_session=False)
         Room.query.filter(Room.id.in_(room_ids)).delete(synchronize_session=False)

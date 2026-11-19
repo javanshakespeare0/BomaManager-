@@ -57,6 +57,45 @@
                 <p>Send the rent to {{ landlord.bank_name }}, account {{ landlord.account_number }}, then keep your transfer confirmation.</p>
             </div>
         {% endif %}
+        <div class="property-card">
+            <h3>Already paid outside the app?</h3>
+            <p>Send the amount you paid and paste the payment message, enter its reference, or attach a screenshot. Your landlord must verify it before your balance is updated.</p>
+            {% if has_pending_payment_proof %}
+                <p class="flash">A payment proof for this billing period is waiting for your landlord to review.</p>
+            {% else %}
+                <form method="POST" action="{{ url_for('submit_payment_proof', room_id=room.id) }}" enctype="multipart/form-data">
+                    <label for="proof-amount">Amount paid (Ksh)</label>
+                    <input type="number" id="proof-amount" name="amount" min="0.01" max="{{ balance }}" step="0.01" required>
+                    <label for="proof-reference">Transaction reference (optional)</label>
+                    <input type="text" id="proof-reference" name="reference" maxlength="100">
+                    <label for="proof-message">Payment message (optional)</label>
+                    <textarea id="proof-message" name="message" maxlength="2000" rows="4" placeholder="Paste the payment confirmation message"></textarea>
+                    <label for="proof-image">Screenshot (optional)</label>
+                    <input type="file" id="proof-image" name="proof_image" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp">
+                    <small>Provide a message, reference, or screenshot. Images must be PNG, JPEG, or WebP up to 5 MB.</small>
+                    <button type="submit">Send payment proof</button>
+                </form>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    {% if payment_proofs %}
+        <section class="property-card" aria-labelledby="payment-proof-history-title">
+            <h2 id="payment-proof-history-title">Submitted payment proofs</h2>
+            {% for proof in payment_proofs %}
+                <div class="tenant-row">
+                    <div>
+                        <strong>Ksh {{ '%.2f'|format(proof.amount) }} · {{ proof.month }}</strong>
+                        <span>Submitted {{ proof.created_at.strftime('%d %b %Y at %H:%M') }}</span>
+                        {% if proof.reference %}<span>Reference: {{ proof.reference }}</span>{% endif %}
+                        {% if proof.image_path %}
+                            <a href="{{ url_for('payment_proof_image', proof_id=proof.id) }}" target="_blank" rel="noopener">View screenshot</a>
+                        {% endif %}
+                    </div>
+                    <span class="count-badge">{{ proof.status|title }}</span>
+                </div>
+            {% endfor %}
+        </section>
     {% endif %}
 
     <a href="{{ url_for('dashboard') }}" class="btn">Back to Dashboard</a>

@@ -6,6 +6,7 @@ os.environ['APP_ENV'] = 'testing'
 os.environ['DATABASE_URL'] = 'sqlite://'
 
 from app import MaintenanceRequest, Property, Room, User, app, db
+from maintenance import is_maintenance_on
 
 
 class MaintenanceRequestTests(unittest.TestCase):
@@ -69,6 +70,29 @@ class MaintenanceRequestTests(unittest.TestCase):
         with self.client.session_transaction() as session:
             session['_user_id'] = str(user_id)
             session['_fresh'] = True
+
+    def test_maintenance_toggle_persists_and_blocks_landlords(self):
+        admin_client = app.test_client()
+        with admin_client.session_transaction() as session:
+            session['is_super_admin'] = True
+            session['role'] = 'super_admin'
+
+        enabled_response = admin_client.post('/admin/toggle-maintenance')
+        self.assertEqual(enabled_response.status_code, 302)
+        with app.app_context():
+            self.assertTrue(is_maintenance_on())
+
+        self.login_as(self.landlord_id)
+        with self.client.session_transaction() as session:
+            session['role'] = 'super_admin'
+            session['is_super_admin'] = True
+        dashboard_response = self.client.get('/dashboard')
+        self.assertEqual(dashboard_response.status_code, 503)
+        self.assertIn(b'currently under maintenance', dashboard_response.data)
+
+        admin_client.post('/admin/toggle-maintenance')
+        with app.app_context():
+            self.assertFalse(is_maintenance_on())
 
     def test_tenant_can_submit_and_view_maintenance_request(self):
         self.login_as(self.tenant_id)

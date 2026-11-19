@@ -58,6 +58,12 @@ app.config['MAINTENANCE_UPLOAD_FOLDER'] = os.path.abspath(
         os.path.join(app.instance_path, 'maintenance_uploads'),
     )
 )
+app.config['PAYMENT_PROOF_UPLOAD_FOLDER'] = os.path.abspath(
+    os.getenv(
+        'PAYMENT_PROOF_UPLOAD_FOLDER',
+        os.path.join(app.instance_path, 'payment_proofs'),
+    )
+)
 
 # GOOGLE OAUTH SETUP
 blueprint = make_google_blueprint(
@@ -137,7 +143,8 @@ def check_subscription_global():
 
 @app.before_request
 def enforce_maintenance_mode():
-    if not is_maintenance_on() or session.get('role') == 'super_admin':
+    is_super_admin = session.get('is_super_admin') and not current_user.is_authenticated
+    if not is_maintenance_on() or is_super_admin:
         return None
     if request.path.startswith('/admin'):
         return None
@@ -149,6 +156,11 @@ def enforce_maintenance_mode():
     return render_template('maintenance.html'), 503
 
 # ==================== MODELS ====================
+class MaintenanceSetting(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    enabled = db.Column(db.Boolean, nullable=False, default=False)
+
+
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(150), unique=True, nullable=False)
@@ -299,6 +311,25 @@ class Payment(db.Model):
     tenant_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     room = db.relationship('Room', backref='payments')
     tenant = db.relationship('User', backref='payments', foreign_keys=[tenant_id])
+
+
+class PaymentProof(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    amount = db.Column(db.Float, nullable=False)
+    month = db.Column(db.String(20), nullable=False)
+    reference = db.Column(db.String(100), nullable=True)
+    message = db.Column(db.Text, nullable=True)
+    image_path = db.Column(db.String(255), nullable=True)
+    status = db.Column(db.String(20), nullable=False, default='pending')
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    room_id = db.Column(db.Integer, db.ForeignKey('room.id'), nullable=False)
+    tenant_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    reviewed_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    room = db.relationship('Room', backref='payment_proofs')
+    tenant = db.relationship('User', foreign_keys=[tenant_id], backref='payment_proofs')
+    reviewer = db.relationship('User', foreign_keys=[reviewed_by_id])
+
 
 class PaymentAttempt(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -601,6 +632,9 @@ def login():
             return redirect(url_for('admin.admin_dashboard'))
         user = User.query.filter_by(email=email).first()
         if user and bcrypt.check_password_hash(user.password, password):
+            session.pop('is_super_admin', None)
+            session.pop('role', None)
+            session.pop('admin_email', None)
             login_user(user)
             if user.must_change_password:
                 return redirect(url_for('reset_password'))
@@ -682,6 +716,9 @@ def register():
         db.session.add(user)
         db.session.commit()
         session.pop('pending_google_registration', None)
+        session.pop('is_super_admin', None)
+        session.pop('role', None)
+        session.pop('admin_email', None)
         login_user(user)
         flash('Account created successfully!')
         return redirect(url_for('dashboard'))
@@ -722,6 +759,9 @@ def google_login():
     session.pop('google_registration_intent', None)
     session.pop('pending_google_registration', None)
 
+    session.pop('is_super_admin', None)
+    session.pop('role', None)
+    session.pop('admin_email', None)
     login_user(user)
     if user.role == 'pending':
         return redirect(url_for('choose_role'))
@@ -872,6 +912,10 @@ def dashboard():
     if current_user.role == 'landlord':
         properties = Property.query.filter_by(landlord_id=current_user.id).all()
         tenants = User.query.filter_by(role='tenant', landlord_id=current_user.id).all()
+        pending_payment_proofs = PaymentProof.query.join(Room).join(Property).filter(
+            Property.landlord_id == current_user.id,
+            PaymentProof.status == 'pending',
+        ).order_by(PaymentProof.created_at.asc()).all()
         room_requests = RoomRequest.query.join(Room).join(Property).filter(
             Property.landlord_id == current_user.id,
             RoomRequest.status == 'pending',
@@ -952,6 +996,13 @@ def dashboard():
                 'sort_at': item.created_at,
                 'request': item,
             })
+        for proof in pending_payment_proofs:
+            attention_items.append({
+                'kind': 'payment_proof',
+                'priority': 0,
+                'sort_at': proof.created_at,
+                'proof': proof,
+            })
         for item in rent_followups:
             attention_items.append({
                 'kind': 'rent',
@@ -994,6 +1045,7 @@ def dashboard():
             properties=properties,
             tenants=tenants,
             room_requests=room_requests,
+            pending_payment_proofs=pending_payment_proofs,
             maintenance_attention_count=maintenance_attention_count,
             maintenance_followups=maintenance_followups,
             attention_items=attention_items,
@@ -2072,6 +2124,7 @@ def delete_property(prop_id):
     prop = Property.query.filter_by(id=prop_id, landlord_id=current_user.id).first_or_404()
     for room in prop.rooms:
         Payment.query.filter_by(room_id=room.id).delete()
+        PaymentProof.query.filter_by(room_id=room.id).delete()
         WaterBill.query.filter_by(room_id=room.id).delete()
         PendingBill.query.filter_by(room_id=room.id).delete()
         RoomRequest.query.filter_by(room_id=room.id).delete()
@@ -2119,6 +2172,7 @@ def delete_room(room_id):
     if room.property.landlord_id != current_user.id:
         return "Access Denied"
     Payment.query.filter_by(room_id=room.id).delete()
+    PaymentProof.query.filter_by(room_id=room.id).delete()
     WaterBill.query.filter_by(room_id=room.id).delete()
     PendingBill.query.filter_by(room_id=room.id).delete()
     RoomRequest.query.filter_by(room_id=room.id).delete()
@@ -2329,6 +2383,15 @@ def vacate_room(room_id):
         Property.landlord_id == current_user.id,
     ).first_or_404()
     vacated_tenant_id = room.tenant_id
+    pending_proofs = PaymentProof.query.filter_by(
+        room_id=room.id,
+        tenant_id=vacated_tenant_id,
+        status='pending',
+    ).all()
+    for proof in pending_proofs:
+        proof.status = 'rejected'
+        proof.reviewed_at = datetime.utcnow()
+        proof.reviewed_by_id = current_user.id
     room.tenant_id = None
     room.is_occupied = False
     room.assigned_date = None
@@ -2543,15 +2606,232 @@ def mpesa_callback():
 @app.route('/pay_rent/<int:room_id>', methods=['GET'])
 @login_required
 def pay_rent(room_id):
-    if current_user.role!= 'tenant': return "Access Denied"
-    room = Room.query.get_or_404(room_id)
+    if current_user.role != 'tenant':
+        return "Access Denied", 403
+    room = Room.query.filter_by(
+        id=room_id,
+        tenant_id=current_user.id,
+    ).first_or_404()
     current_period = get_billing_period(room)
     if not current_period:
         flash('This room has no assignment date.')
         return redirect(url_for('dashboard'))
     period_key = current_period['key']
     summary = get_payment_summary(room, period_key)
-    return render_template('pay_rent.html', room=room, landlord=room.property.landlord, water_bill=summary['water_bill'], total_amount=summary['total_amount'], total_paid=summary['total_paid'], balance=summary['balance'], paid=summary['balance'] == 0, current_period=current_period)
+    payment_proofs = PaymentProof.query.filter_by(
+        room_id=room.id,
+        tenant_id=current_user.id,
+    ).order_by(PaymentProof.created_at.desc()).limit(10).all()
+    has_pending_payment_proof = any(proof.status == 'pending' for proof in payment_proofs)
+    return render_template(
+        'pay_rent.html',
+        room=room,
+        landlord=room.property.landlord,
+        water_bill=summary['water_bill'],
+        total_amount=summary['total_amount'],
+        total_paid=summary['total_paid'],
+        balance=summary['balance'],
+        paid=summary['balance'] == 0,
+        current_period=current_period,
+        payment_proofs=payment_proofs,
+        has_pending_payment_proof=has_pending_payment_proof,
+    )
+
+
+@app.route('/payment-proofs/<int:room_id>', methods=['POST'])
+@login_required
+def submit_payment_proof(room_id):
+    if current_user.role != 'tenant':
+        return "Access Denied", 403
+    room = Room.query.filter_by(
+        id=room_id,
+        tenant_id=current_user.id,
+    ).first_or_404()
+    current_period = get_billing_period(room)
+    if not current_period:
+        flash('This room has no assignment date.')
+        return redirect(url_for('dashboard'))
+
+    summary = get_payment_summary(room, current_period['key'])
+    if summary['balance'] <= 0:
+        flash('This billing period is already fully paid.')
+        return redirect(url_for('pay_rent', room_id=room.id))
+
+    try:
+        amount = Decimal(request.form.get('amount', '').strip())
+    except (InvalidOperation, TypeError, ValueError):
+        amount = Decimal('0')
+    balance = Decimal(str(summary['balance']))
+    if not amount.is_finite() or amount <= 0 or amount > balance:
+        flash('Enter an amount greater than zero and no more than the current balance.')
+        return redirect(url_for('pay_rent', room_id=room.id))
+
+    reference = request.form.get('reference', '').strip()
+    message = request.form.get('message', '').strip()
+    if len(reference) > 100 or len(message) > 2000:
+        flash('The reference must be 100 characters or fewer and the message 2,000 or fewer.')
+        return redirect(url_for('pay_rent', room_id=room.id))
+
+    pending_proof = PaymentProof.query.filter_by(
+        room_id=room.id,
+        tenant_id=current_user.id,
+        month=current_period['key'],
+        status='pending',
+    ).first()
+    if pending_proof:
+        flash('You already have a payment proof waiting for landlord review.')
+        return redirect(url_for('pay_rent', room_id=room.id))
+
+    proof_image = request.files.get('proof_image')
+    image_path = None
+    if proof_image and proof_image.filename:
+        extension = os.path.splitext(proof_image.filename)[1].lower()
+        image_bytes = proof_image.stream.read(5 * 1024 * 1024 + 1)
+        signatures = {
+            '.png': image_bytes.startswith(b'\x89PNG\r\n\x1a\n'),
+            '.jpg': image_bytes.startswith(b'\xff\xd8\xff'),
+            '.jpeg': image_bytes.startswith(b'\xff\xd8\xff'),
+            '.webp': (
+                len(image_bytes) >= 12
+                and image_bytes[:4] == b'RIFF'
+                and image_bytes[8:12] == b'WEBP'
+            ),
+        }
+        if len(image_bytes) > 5 * 1024 * 1024 or not signatures.get(extension, False):
+            flash('Attach a valid PNG, JPEG, or WebP image up to 5 MB.')
+            return redirect(url_for('pay_rent', room_id=room.id))
+        upload_directory = app.config['PAYMENT_PROOF_UPLOAD_FOLDER']
+        filename = f'{secrets.token_hex(16)}{extension}'
+        try:
+            os.makedirs(upload_directory, exist_ok=True)
+            with open(os.path.join(upload_directory, filename), 'wb') as image_file:
+                image_file.write(image_bytes)
+        except OSError:
+            app.logger.exception('Could not save payment proof for tenant %s.', current_user.id)
+            flash('The payment proof could not be saved. Please try again.')
+            return redirect(url_for('pay_rent', room_id=room.id))
+        image_path = filename
+
+    if not reference and not message and not image_path:
+        flash('Enter the payment message or reference, or attach a screenshot.')
+        return redirect(url_for('pay_rent', room_id=room.id))
+
+    proof = PaymentProof(
+        amount=float(amount),
+        month=current_period['key'],
+        reference=reference or None,
+        message=message or None,
+        image_path=image_path,
+        room_id=room.id,
+        tenant_id=current_user.id,
+    )
+    db.session.add(proof)
+    db.session.commit()
+    flash('Your payment proof was sent to your landlord for review.')
+    return redirect(url_for('pay_rent', room_id=room.id))
+
+
+def landlord_payment_proof_or_404(proof_id):
+    return PaymentProof.query.join(Room).join(Property).filter(
+        PaymentProof.id == proof_id,
+        Property.landlord_id == current_user.id,
+    ).first_or_404()
+
+
+@app.route('/payment-proofs/<int:proof_id>/approve', methods=['POST'])
+@login_required
+@subscription_required
+def approve_payment_proof(proof_id):
+    if current_user.role != 'landlord':
+        return "Access Denied", 403
+    proof = landlord_payment_proof_or_404(proof_id)
+    if proof.status != 'pending':
+        flash('This payment proof has already been reviewed.')
+        return redirect(url_for('dashboard'))
+    if proof.room.tenant_id != proof.tenant_id:
+        proof.status = 'rejected'
+        proof.reviewed_at = datetime.utcnow()
+        proof.reviewed_by_id = current_user.id
+        db.session.commit()
+        flash('The tenant is no longer assigned to this room. The proof was closed without recording a payment.')
+        return redirect(url_for('dashboard'))
+
+    summary = get_payment_summary(proof.room, proof.month)
+    amount = Decimal(str(proof.amount))
+    balance = Decimal(str(summary['balance']))
+    if amount <= 0 or amount > balance:
+        flash('The outstanding balance changed. Review the current balance before approving this proof.')
+        return redirect(url_for('dashboard'))
+    if proof.reference and Payment.query.filter_by(mpesa_code=proof.reference).first():
+        flash('A payment with this transaction reference is already recorded.')
+        return redirect(url_for('dashboard'))
+
+    db.session.add(Payment(
+        amount=float(amount),
+        month=proof.month,
+        room_id=proof.room_id,
+        tenant_id=proof.tenant_id,
+        mpesa_code=proof.reference or f'OFFLINE-{proof.id}',
+    ))
+    proof.status = 'approved'
+    proof.reviewed_at = datetime.utcnow()
+    proof.reviewed_by_id = current_user.id
+    db.session.commit()
+    flash(f'Payment proof approved for Room {proof.room.room_number}.')
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/payment-proofs/<int:proof_id>/reject', methods=['POST'])
+@login_required
+@subscription_required
+def reject_payment_proof(proof_id):
+    if current_user.role != 'landlord':
+        return "Access Denied", 403
+    proof = landlord_payment_proof_or_404(proof_id)
+    if proof.status != 'pending':
+        flash('This payment proof has already been reviewed.')
+        return redirect(url_for('dashboard'))
+    proof.status = 'rejected'
+    proof.reviewed_at = datetime.utcnow()
+    proof.reviewed_by_id = current_user.id
+    db.session.commit()
+    flash(f'Payment proof for Room {proof.room.room_number} was rejected.')
+    return redirect(url_for('dashboard'))
+
+
+@app.route('/payment-proof-images/<int:proof_id>')
+@login_required
+def payment_proof_image(proof_id):
+    proof = PaymentProof.query.join(Room).join(Property).filter(
+        PaymentProof.id == proof_id,
+    ).first_or_404()
+    if current_user.role == 'tenant':
+        if proof.tenant_id != current_user.id:
+            return "Access Denied", 403
+    elif current_user.role == 'landlord':
+        if proof.room.property.landlord_id != current_user.id:
+            return "Access Denied", 403
+    else:
+        return "Access Denied", 403
+    if not proof.image_path:
+        return "Image Not Found", 404
+    upload_directory = app.config['PAYMENT_PROOF_UPLOAD_FOLDER']
+    if not os.path.isfile(os.path.join(upload_directory, proof.image_path)):
+        app.logger.warning(
+            'Payment proof image is missing for proof %s. Check that PAYMENT_PROOF_UPLOAD_FOLDER points to persistent storage.',
+            proof.id,
+        )
+        abort(
+            404,
+            description='This payment proof image is missing from server storage. Configure persistent upload storage to prevent this.',
+        )
+    response = send_from_directory(
+        upload_directory,
+        proof.image_path,
+        conditional=True,
+    )
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
 
 @app.route('/payment_history')
 @login_required

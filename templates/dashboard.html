@@ -106,6 +106,10 @@
                     <span>Outstanding rent</span>
                     <strong>{{ rent_followups|length }}</strong>
                 </a>
+                <a href="#attention-items" class="attention-summary-card">
+                    <span>Payment proofs</span>
+                    <strong>{{ pending_payment_proofs|length }}</strong>
+                </a>
                 <a href="{{ url_for('maintenance_requests') }}" class="attention-summary-card">
                     <span>Maintenance</span>
                     <strong data-attention-count="{{ maintenance_attention_count }}">{{ maintenance_attention_count }}</strong>
@@ -122,7 +126,30 @@
             <div class="attention-list" id="attention-items" role="list" aria-label="Prioritized follow-up actions">
                 {% for entry in attention_items %}
                     <article class="attention-row attention-item-{{ entry.kind }}" role="listitem">
-                        {% if entry.kind == 'rent' %}
+                        {% if entry.kind == 'payment_proof' %}
+                            {% set proof = entry.proof %}
+                            <span class="attention-kind-badge">Payment proof</span>
+                            <div class="attention-row-details">
+                                <strong>{{ proof.room.property.name }} · Room {{ proof.room.room_number }} · Ksh {{ '%.2f'|format(proof.amount) }}</strong>
+                                <span>{{ proof.tenant.name or proof.tenant.email }} · {{ proof.month }}</span>
+                                {% if proof.reference %}<span>Reference: {{ proof.reference }}</span>{% endif %}
+                                <details>
+                                    <summary>Review payment message</summary>
+                                    {% if proof.message %}<p>{{ proof.message }}</p>{% endif %}
+                                    {% if proof.image_path %}
+                                        <a href="{{ url_for('payment_proof_image', proof_id=proof.id) }}" target="_blank" rel="noopener">View attached screenshot</a>
+                                    {% endif %}
+                                </details>
+                            </div>
+                            <div class="attention-row-actions">
+                                <form method="POST" action="{{ url_for('approve_payment_proof', proof_id=proof.id) }}" onsubmit="return confirm('Approve this payment proof and record Ksh {{ '%.2f'|format(proof.amount) }} for the room?');">
+                                    <button class="btn primary-action" type="submit">Approve payment</button>
+                                </form>
+                                <form method="POST" action="{{ url_for('reject_payment_proof', proof_id=proof.id) }}" onsubmit="return confirm('Reject this payment proof? The rent balance will remain due.');">
+                                    <button class="btn btn-danger" type="submit">Reject</button>
+                                </form>
+                            </div>
+                        {% elif entry.kind == 'rent' %}
                             {% set item = entry.followup %}
                             <span class="attention-kind-badge">{{ 'Past due' if item.is_due else 'Balance open' }}</span>
                             <div class="attention-row-details">
@@ -174,7 +201,7 @@
                         {% endif %}
                     </article>
                 {% else %}
-                    <p class="empty-state">You’re all caught up. No rent, maintenance, applications, or vacancies need attention.</p>
+                    <p class="empty-state">You’re all caught up. No payment proofs, rent, maintenance, applications, or vacancies need attention.</p>
                 {% endfor %}
             </div>
             <span class="attention-feedback" data-copy-feedback role="status" aria-live="polite"></span>

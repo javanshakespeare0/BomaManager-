@@ -13,6 +13,7 @@ from app import (
     MaintenanceRequest,
     Payment,
     PaymentReminder,
+    PaymentProof,
     Property,
     PendingBill,
     Room,
@@ -29,6 +30,7 @@ class ProductivityFeatureTests(unittest.TestCase):
         app.config.update(TESTING=True, WTF_CSRF_ENABLED=False)
         self.uploads = tempfile.TemporaryDirectory()
         app.config['MAINTENANCE_UPLOAD_FOLDER'] = self.uploads.name
+        app.config['PAYMENT_PROOF_UPLOAD_FOLDER'] = self.uploads.name
         with app.app_context():
             db.drop_all()
             db.create_all()
@@ -229,6 +231,97 @@ class ProductivityFeatureTests(unittest.TestCase):
             self.assertEqual(reminder.tenant_id, self.tenant_id)
             self.assertEqual(reminder.channel, 'manual')
             self.assertEqual(reminder.amount, 10000)
+
+    def test_tenant_payment_proof_requires_landlord_approval(self):
+        self.login_as(self.tenant_id)
+        image = b'\x89PNG\r\n\x1a\n' + b'\x00' * 24
+        response = self.client.post(
+            f'/payment-proofs/{self.room_id}',
+            data={
+                'amount': '10000',
+                'reference': 'BANK-123',
+                'message': 'Transfer completed successfully.',
+                'proof_image': (io.BytesIO(image), 'payment.png'),
+            },
+            content_type='multipart/form-data',
+        )
+
+        self.assertEqual(response.status_code, 302)
+        with app.app_context():
+            proof = PaymentProof.query.one()
+            proof_id = proof.id
+            self.assertEqual(proof.status, 'pending')
+            self.assertEqual(Payment.query.count(), 0)
+
+        proof_image = self.client.get(f'/payment-proof-images/{proof_id}')
+        self.assertEqual(proof_image.status_code, 200)
+        self.assertEqual(proof_image.headers.get('X-Content-Type-Options'), 'nosniff')
+        proof_image.close()
+
+        self.login_as(self.landlord_id)
+        landlord_dashboard = self.client.get('/dashboard')
+        self.assertEqual(landlord_dashboard.status_code, 200)
+        self.assertIn(b'Payment proof', landlord_dashboard.data)
+        approval = self.client.post(f'/payment-proofs/{proof_id}/approve')
+        self.assertEqual(approval.status_code, 302)
+
+        with app.app_context():
+            proof = db.session.get(PaymentProof, proof_id)
+            payment = Payment.query.one()
+            self.assertEqual(proof.status, 'approved')
+            self.assertEqual(payment.amount, 10000)
+            self.assertEqual(payment.mpesa_code, 'BANK-123')
+            self.assertEqual(payment.tenant_id, self.tenant_id)
+
+    def test_rejecting_payment_proof_does_not_record_a_payment(self):
+        self.login_as(self.tenant_id)
+        response = self.client.post(
+            f'/payment-proofs/{self.room_id}',
+            data={
+                'amount': '5000',
+                'message': 'I transferred rent.',
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+
+        with app.app_context():
+            proof_id = PaymentProof.query.one().id
+        self.login_as(self.landlord_id)
+        rejection = self.client.post(f'/payment-proofs/{proof_id}/reject')
+        self.assertEqual(rejection.status_code, 302)
+
+        with app.app_context():
+            proof = db.session.get(PaymentProof, proof_id)
+            self.assertEqual(proof.status, 'rejected')
+            self.assertEqual(Payment.query.count(), 0)
+
+    def test_payment_proof_review_is_limited_to_owning_landlord(self):
+        self.login_as(self.tenant_id)
+        response = self.client.post(
+            f'/payment-proofs/{self.room_id}',
+            data={'amount': '5000', 'message': 'I transferred rent.'},
+        )
+        self.assertEqual(response.status_code, 302)
+        with app.app_context():
+            proof_id = PaymentProof.query.one().id
+            other_landlord = User(
+                email='other-landlord@example.test',
+                password='unused',
+                role='landlord',
+                is_landlord=True,
+                subscription_status='active',
+                subscription_expiry=datetime.utcnow() + timedelta(days=30),
+            )
+            db.session.add(other_landlord)
+            db.session.commit()
+            other_landlord_id = other_landlord.id
+
+        self.login_as(other_landlord_id)
+        response = self.client.post(f'/payment-proofs/{proof_id}/approve')
+        self.assertEqual(response.status_code, 404)
+        with app.app_context():
+            self.assertEqual(db.session.get(PaymentProof, proof_id).status, 'pending')
+            self.assertEqual(Payment.query.count(), 0)
 
     def test_payment_reminder_rejects_another_landlords_room(self):
         with app.app_context():
