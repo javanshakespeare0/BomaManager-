@@ -9,6 +9,12 @@
         <a href="{{ url_for('my_properties') }}" {% if request.endpoint == 'my_properties' %}aria-current="page"{% endif %}>My Properties</a>
         <a href="{{ url_for('landlord_reports') }}" {% if request.endpoint == 'landlord_reports' %}aria-current="page"{% endif %}>Reports</a>
         <a href="{{ url_for('payment_history') }}" {% if request.endpoint == 'payment_history' %}aria-current="page"{% endif %}>Payments</a>
+        <a class="payment-proof-nav-link{% if pending_payment_proof_count %} has-pending-proofs{% endif %}" href="{{ url_for('dashboard', _anchor='attention-items') }}" aria-label="Payment proofs{% if pending_payment_proof_count %}, {{ pending_payment_proof_count }} pending{% endif %}">
+            <span>Payment proofs</span>
+            {% if pending_payment_proof_count %}
+                <span class="attention-badge" aria-hidden="true">{{ pending_payment_proof_count }}</span>
+            {% endif %}
+        </a>
         <a href="{{ url_for('maintenance_requests') }}" {% if request.endpoint == 'maintenance_requests' %}aria-current="page"{% endif %}>Maintenance</a>
         <a href="{{ url_for('subscription_page') }}" {% if request.endpoint == 'subscription_page' %}aria-current="page"{% endif %}>Subscription</a>
         <a href="{{ url_for('add_property') }}" {% if request.endpoint in ['add_property', 'edit_property'] %}aria-current="page"{% endif %}>Add property</a>

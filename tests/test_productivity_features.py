@@ -262,6 +262,10 @@ class ProductivityFeatureTests(unittest.TestCase):
         landlord_dashboard = self.client.get('/dashboard')
         self.assertEqual(landlord_dashboard.status_code, 200)
         self.assertIn(b'Payment proof', landlord_dashboard.data)
+        self.assertIn(b'href="/dashboard#attention-items"', landlord_dashboard.data)
+        self.assertIn(b'aria-label="Payment proofs, 1 pending"', landlord_dashboard.data)
+        reports_page = self.client.get('/reports')
+        self.assertIn(b'Payment proofs, 1 pending', reports_page.data)
         approval = self.client.post(f'/payment-proofs/{proof_id}/approve')
         self.assertEqual(approval.status_code, 302)
 

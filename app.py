@@ -464,6 +464,17 @@ with app.app_context():
     initialize_database()
 
 
+@app.context_processor
+def inject_pending_payment_proof_count():
+    pending_count = 0
+    if current_user.is_authenticated and current_user.role == 'landlord':
+        pending_count = PaymentProof.query.join(Room).join(Property).filter(
+            Property.landlord_id == current_user.id,
+            PaymentProof.status == 'pending',
+        ).count()
+    return {'pending_payment_proof_count': pending_count}
+
+
 def generate_room_numbers(room_type, room_count, prefix=None, start_number=1):
     room_type = room_type or 'Room'
     prefix_map = {

@@ -2582,6 +2582,14 @@ html[data-theme="contrast"] .maintenance-status-resolved {
     color: var(--accent-strong);
 }
 
+.app-navigation-links .payment-proof-nav-link {
+    gap: 7px;
+}
+
+.app-navigation-links .payment-proof-nav-link.has-pending-proofs {
+    color: var(--accent-strong);
+}
+
 .attention-center {
     display: grid;
     min-width: 0;
