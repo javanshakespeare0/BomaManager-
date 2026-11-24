@@ -1,25 +1,40 @@
-{% if current_user.is_authenticated and current_user.role == 'landlord' %}
+{% if current_user.is_authenticated and current_user.role in ['landlord', 'tenant'] %}
 <nav class="app-navigation" aria-label="Main navigation">
     <a class="app-navigation-home" href="{{ url_for('dashboard') }}">
         <img src="{{ url_for('static', filename='logo.svg') }}" alt="" aria-hidden="true">
         <span>BomaManager</span>
     </a>
     <div class="app-navigation-links">
-        <a href="{{ url_for('dashboard') }}" {% if request.endpoint == 'dashboard' %}aria-current="page"{% endif %}>Overview</a>
-        <a href="{{ url_for('my_properties') }}" {% if request.endpoint == 'my_properties' %}aria-current="page"{% endif %}>My Properties</a>
-        <a href="{{ url_for('landlord_reports') }}" {% if request.endpoint == 'landlord_reports' %}aria-current="page"{% endif %}>Reports</a>
-        <a href="{{ url_for('payment_history') }}" {% if request.endpoint == 'payment_history' %}aria-current="page"{% endif %}>Payments</a>
-        <a class="payment-proof-nav-link{% if pending_payment_proof_count %} has-pending-proofs{% endif %}" href="{{ url_for('dashboard', _anchor='attention-items') }}" aria-label="Payment proofs{% if pending_payment_proof_count %}, {{ pending_payment_proof_count }} pending{% endif %}">
-            <span>Payment proofs</span>
-            {% if pending_payment_proof_count %}
-                <span class="attention-badge" aria-hidden="true">{{ pending_payment_proof_count }}</span>
+        {% if current_user.role == 'landlord' %}
+            <a href="{{ url_for('dashboard') }}" {% if request.endpoint == 'dashboard' %}aria-current="page"{% endif %}>Overview</a>
+            <a href="{{ url_for('my_properties') }}" {% if request.endpoint == 'my_properties' %}aria-current="page"{% endif %}>My Properties</a>
+            <a href="{{ url_for('landlord_reports') }}" {% if request.endpoint == 'landlord_reports' %}aria-current="page"{% endif %}>Reports</a>
+            <a href="{{ url_for('payment_history') }}" {% if request.endpoint == 'payment_history' %}aria-current="page"{% endif %}>Payments</a>
+            <a class="payment-proof-nav-link{% if pending_payment_proof_count %} has-pending-proofs{% endif %}" href="{{ url_for('dashboard', _anchor='attention-items') }}" aria-label="Payment proofs{% if pending_payment_proof_count %}, {{ pending_payment_proof_count }} pending{% endif %}">
+                <span>Payment proofs</span>
+                {% if pending_payment_proof_count %}
+                    <span class="attention-badge" aria-hidden="true">{{ pending_payment_proof_count }}</span>
+                {% endif %}
+            </a>
+            <a href="{{ url_for('maintenance_requests') }}" {% if request.endpoint == 'maintenance_requests' %}aria-current="page"{% endif %}>Maintenance</a>
+            <a href="{{ url_for('subscription_page') }}" {% if request.endpoint == 'subscription_page' %}aria-current="page"{% endif %}>Subscription</a>
+            <a href="{{ url_for('add_property') }}" {% if request.endpoint in ['add_property', 'edit_property'] %}aria-current="page"{% endif %}>Add property</a>
+            <a href="{{ url_for('add_tenant') }}" {% if request.endpoint == 'add_tenant' %}aria-current="page"{% endif %}>Add tenant</a>
+            <a href="{{ url_for('settings') }}" {% if request.endpoint == 'settings' %}aria-current="page"{% endif %}>Settings</a>
+        {% else %}
+            <a href="{{ url_for('dashboard') }}" {% if request.endpoint == 'dashboard' %}aria-current="page"{% endif %}>Dashboard</a>
+            <a class="payment-proof-nav-link{% if unread_notification_count %} has-pending-proofs{% endif %}" href="{{ url_for('dashboard', _anchor='notifications') }}" aria-label="Notifications{% if unread_notification_count %}, {{ unread_notification_count }} unread{% endif %}">
+                <span>Notifications</span>
+                {% if unread_notification_count %}
+                    <span class="attention-badge" aria-hidden="true">{{ unread_notification_count }}</span>
+                {% endif %}
+            </a>
+            {% if current_user.room %}
+                <a href="{{ url_for('pay_rent', room_id=current_user.room[0].id) }}" {% if request.endpoint == 'pay_rent' %}aria-current="page"{% endif %}>Pay rent</a>
             {% endif %}
-        </a>
-        <a href="{{ url_for('maintenance_requests') }}" {% if request.endpoint == 'maintenance_requests' %}aria-current="page"{% endif %}>Maintenance</a>
-        <a href="{{ url_for('subscription_page') }}" {% if request.endpoint == 'subscription_page' %}aria-current="page"{% endif %}>Subscription</a>
-        <a href="{{ url_for('add_property') }}" {% if request.endpoint in ['add_property', 'edit_property'] %}aria-current="page"{% endif %}>Add property</a>
-        <a href="{{ url_for('add_tenant') }}" {% if request.endpoint == 'add_tenant' %}aria-current="page"{% endif %}>Add tenant</a>
-        <a href="{{ url_for('settings') }}" {% if request.endpoint == 'settings' %}aria-current="page"{% endif %}>Settings</a>
+            <a href="{{ url_for('payment_history') }}" {% if request.endpoint == 'payment_history' %}aria-current="page"{% endif %}>Payments</a>
+            <a href="{{ url_for('maintenance_requests') }}" {% if request.endpoint == 'maintenance_requests' %}aria-current="page"{% endif %}>Maintenance</a>
+        {% endif %}
     </div>
 </nav>
 {% endif %}

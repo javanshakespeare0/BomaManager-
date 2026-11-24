@@ -2590,6 +2590,22 @@ html[data-theme="contrast"] .maintenance-status-resolved {
     color: var(--accent-strong);
 }
 
+.tenant-notifications {
+    scroll-margin-top: 20px;
+}
+
+.tenant-notification {
+    align-items: center;
+}
+
+.tenant-notification > div {
+    flex-direction: column;
+}
+
+.tenant-notification-unread {
+    border-left-color: var(--accent-strong);
+}
+
 .attention-center {
     display: grid;
     min-width: 0;
@@ -3596,5 +3612,520 @@ html[data-theme="dark"] .maintenance-form-card {
     .location-room-title {
         align-items: flex-start;
         flex-direction: column;
+    }
+}
+
+body.tenant-dashboard-page {
+    min-width: 320px;
+    padding: clamp(8px, 2vw, 18px);
+    background: var(--page-bg);
+    color: var(--text);
+}
+
+.tenant-dashboard {
+    display: grid;
+    gap: clamp(16px, 2.4vw, 28px);
+    width: min(100%, 1120px);
+    padding: clamp(16px, 3vw, 34px);
+    background: var(--surface-raised);
+}
+
+.tenant-dashboard .dashboard-header {
+    align-items: center;
+    gap: 20px;
+    margin: 0;
+    padding: clamp(18px, 3vw, 30px);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background:
+        radial-gradient(circle at 95% 0%, rgba(52, 140, 119, .12), transparent 18rem),
+        var(--surface);
+}
+
+.tenant-dashboard .dashboard-header h1 {
+    color: var(--text);
+    font-size: clamp(1.7rem, 3vw, 2.4rem);
+    line-height: 1.15;
+}
+
+.tenant-dashboard .dashboard-header .muted {
+    max-width: 58ch;
+    margin: 8px 0 0;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.tenant-dashboard-intro {
+    display: grid;
+    gap: 7px;
+    margin-bottom: -8px;
+}
+
+.tenant-dashboard-intro .eyebrow,
+.tenant-contact-card .eyebrow {
+    margin: 0;
+}
+
+.tenant-dashboard-intro h2,
+.tenant-contact-card h3 {
+    color: var(--text);
+}
+
+.tenant-dashboard-intro .muted {
+    margin: 0;
+    color: var(--text-muted);
+}
+
+.tenant-quick-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 185px), 1fr));
+    gap: 12px;
+}
+
+.tenant-quick-action {
+    display: grid;
+    min-width: 0;
+    min-height: 130px;
+    align-content: start;
+    gap: 9px;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--surface);
+    color: var(--text);
+    text-decoration: none;
+    transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+
+.tenant-quick-action:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+    box-shadow: 0 12px 24px rgba(22, 52, 45, .1);
+    color: var(--text);
+    text-decoration: none;
+}
+
+.tenant-quick-action:focus-visible,
+.tenant-dashboard .app-navigation-links a:focus-visible {
+    outline: 3px solid var(--focus-ring);
+    outline-offset: 3px;
+}
+
+.tenant-quick-action-kicker {
+    color: var(--accent-strong);
+    font: 700 .7rem/1.3 "Segoe UI", Arial, sans-serif;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+}
+
+.tenant-quick-action strong {
+    color: var(--text);
+    font-size: 1.03rem;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+}
+
+.tenant-quick-action small {
+    color: var(--text-muted);
+    font: .82rem/1.45 "Segoe UI", Arial, sans-serif;
+    overflow-wrap: anywhere;
+}
+
+.tenant-quick-action-primary {
+    border-color: transparent;
+    background: linear-gradient(135deg, #287d72 0%, #1d6258 100%);
+    color: #fff;
+}
+
+.tenant-quick-action-primary .tenant-quick-action-kicker,
+.tenant-quick-action-primary strong,
+.tenant-quick-action-primary small {
+    color: #fff;
+}
+
+.tenant-quick-action-primary:hover {
+    border-color: transparent;
+    box-shadow: 0 14px 28px rgba(29, 98, 88, .24);
+    color: #fff;
+}
+
+.tenant-dashboard .tenant-notifications,
+.tenant-dashboard .tenant-contact-card,
+.tenant-dashboard .tenant-room-card,
+.tenant-dashboard .tenant-rooms-section {
+    min-width: 0;
+    margin: 0;
+    padding: clamp(16px, 2.5vw, 24px);
+    border-left-width: 1px;
+}
+
+.tenant-dashboard .tenant-notifications {
+    scroll-margin-top: 20px;
+}
+
+.tenant-dashboard .tenant-notifications .section-heading {
+    align-items: center;
+    margin-bottom: 14px;
+}
+
+.tenant-dashboard .tenant-notification {
+    align-items: center;
+    margin-top: 10px;
+    padding: 14px 16px;
+}
+
+.tenant-dashboard .tenant-notification > div {
+    display: grid;
+    min-width: 0;
+    gap: 6px;
+}
+
+.tenant-dashboard .tenant-notification strong {
+    color: var(--text);
+}
+
+.tenant-dashboard .tenant-notification span,
+.tenant-dashboard .tenant-notification small {
+    color: var(--text-muted);
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.tenant-dashboard .tenant-notification-unread {
+    border-left: 4px solid var(--accent);
+    background: var(--surface-raised);
+}
+
+.tenant-dashboard .tenant-notification form {
+    margin: 0;
+}
+
+.tenant-contact-card {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 20px;
+}
+
+.tenant-contact-card > div {
+    display: grid;
+    gap: 5px;
+}
+
+.tenant-contact-card p {
+    margin: 0;
+    color: var(--text-muted);
+    overflow-wrap: anywhere;
+}
+
+.tenant-contact-card p b {
+    color: var(--text);
+}
+
+.tenant-dashboard .tenant-rooms-section {
+    display: grid;
+    gap: 14px;
+}
+
+.tenant-dashboard .tenant-rooms-section .section-heading {
+    margin: 0;
+}
+
+.tenant-room-card {
+    scroll-margin-top: 20px;
+}
+
+.tenant-dashboard .tenant-rent-header {
+    align-items: center;
+}
+
+.tenant-dashboard .tenant-rent-header .eyebrow,
+.tenant-dashboard .tenant-rent-header .muted {
+    margin: 0 0 5px;
+    color: var(--text-muted);
+}
+
+.tenant-dashboard .tenant-summary-grid {
+    gap: 12px;
+}
+
+.tenant-dashboard .tenant-summary-grid > div {
+    min-height: 86px;
+    justify-content: center;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface-raised);
+}
+
+.tenant-dashboard .tenant-summary-grid span {
+    color: var(--text-muted);
+}
+
+.tenant-dashboard .tenant-summary-grid strong {
+    color: var(--text);
+}
+
+.tenant-rent-progress {
+    display: grid;
+    gap: 8px;
+    padding: 14px;
+    border-radius: 12px;
+    background: var(--surface-raised);
+}
+
+.tenant-rent-progress-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--text-muted);
+    font: 700 .82rem/1.4 "Segoe UI", Arial, sans-serif;
+}
+
+.tenant-rent-progress-heading strong {
+    color: var(--accent-strong);
+    font-size: .95rem;
+}
+
+.tenant-rent-progress progress {
+    display: block;
+    width: 100%;
+    height: 12px;
+    overflow: hidden;
+    border: 0;
+    border-radius: 999px;
+    background: var(--border);
+    accent-color: var(--accent);
+}
+
+.tenant-rent-progress progress::-webkit-progress-bar {
+    border-radius: 999px;
+    background: var(--border);
+}
+
+.tenant-rent-progress progress::-webkit-progress-value {
+    border-radius: 999px;
+    background: var(--accent);
+}
+
+.tenant-rent-progress progress::-moz-progress-bar {
+    border-radius: 999px;
+    background: var(--accent);
+}
+
+.tenant-rent-progress small {
+    color: var(--text-muted);
+    font: .78rem/1.4 "Segoe UI", Arial, sans-serif;
+    overflow-wrap: anywhere;
+}
+
+.tenant-dashboard .tenant-period {
+    color: var(--text-muted);
+}
+
+.tenant-paid-note {
+    margin: 16px 0 0;
+    padding: 12px 14px;
+    border: 1px solid #b7dfcb;
+    border-radius: 10px;
+    background: #e7f5ee;
+    color: #21694c;
+    font: 700 .88rem/1.4 "Segoe UI", Arial, sans-serif;
+}
+
+.tenant-dashboard .tenant-pay-button {
+    justify-self: start;
+    min-height: 46px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: -12px 0 0;
+    padding: 11px 18px;
+}
+
+.tenant-dashboard .countdown-banner-tenant {
+    border-color: #e7bd72;
+}
+
+@media (max-width: 760px) {
+    .tenant-dashboard {
+        gap: 18px;
+        padding: 14px;
+    }
+
+    .tenant-dashboard .dashboard-header {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 20px;
+    }
+
+    .tenant-dashboard .dashboard-header-actions {
+        width: 100%;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .tenant-dashboard .app-navigation {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .tenant-dashboard .app-navigation-links {
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        padding: 2px 2px 6px;
+        scrollbar-width: thin;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .tenant-dashboard .tenant-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .tenant-dashboard .tenant-rent-header {
+        align-items: flex-start;
+        flex-direction: row;
+    }
+}
+
+@media (max-width: 520px) {
+    body.tenant-dashboard-page {
+        padding: 8px;
+    }
+
+    .tenant-dashboard {
+        gap: 14px;
+        padding: 10px;
+        border-radius: 16px;
+    }
+
+    .tenant-dashboard .dashboard-header {
+        padding: 18px 15px;
+    }
+
+    .tenant-dashboard .dashboard-header-actions {
+        align-items: stretch;
+    }
+
+    .tenant-dashboard .theme-control {
+        flex: 1 1 160px;
+    }
+
+    .tenant-quick-actions {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+        gap: 9px;
+    }
+
+    .tenant-quick-action {
+        min-height: 118px;
+        padding: 14px;
+    }
+
+    .tenant-dashboard .tenant-notifications,
+    .tenant-dashboard .tenant-contact-card,
+    .tenant-dashboard .tenant-room-card,
+    .tenant-dashboard .tenant-rooms-section {
+        padding: 15px 13px;
+    }
+
+    .tenant-dashboard .tenant-notification {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 13px;
+    }
+
+    .tenant-dashboard .tenant-notification form,
+    .tenant-dashboard .tenant-notification form button,
+    .tenant-dashboard .tenant-pay-button {
+        width: 100%;
+    }
+
+    .tenant-dashboard .tenant-rent-header {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .tenant-dashboard .tenant-summary-grid {
+        gap: 8px;
+    }
+
+    .tenant-dashboard .tenant-summary-grid > div {
+        min-height: 78px;
+        padding: 11px;
+    }
+
+    .tenant-dashboard .tenant-pay-button {
+        justify-self: stretch;
+        margin-top: -6px;
+    }
+
+    .tenant-dashboard .countdown-banner-tenant .countdown-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 360px) {
+    .tenant-dashboard .tenant-summary-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .tenant-quick-actions {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+html[data-theme="dark"] .tenant-dashboard .tenant-quick-action,
+html[data-theme="dark"] .tenant-dashboard .tenant-summary-grid > div,
+html[data-theme="dark"] .tenant-dashboard .tenant-rent-progress {
+    border-color: var(--border);
+    background: var(--surface);
+}
+
+html[data-theme="dark"] .tenant-dashboard .tenant-quick-action-primary {
+    border-color: transparent;
+    background: linear-gradient(135deg, #287d72 0%, #1d6258 100%);
+}
+
+html[data-theme="dark"] .tenant-dashboard .tenant-quick-action-primary strong,
+html[data-theme="dark"] .tenant-dashboard .tenant-quick-action-primary small,
+html[data-theme="dark"] .tenant-dashboard .tenant-quick-action-primary .tenant-quick-action-kicker {
+    color: #fff;
+}
+
+html[data-theme="dark"] .tenant-paid-note {
+    border-color: #456b58;
+    background: #203d2c;
+    color: #c7f1d5;
+}
+
+html[data-theme="contrast"] .tenant-quick-action,
+html[data-theme="contrast"] .tenant-rent-progress,
+html[data-theme="contrast"] .tenant-dashboard .tenant-summary-grid > div {
+    border-color: #fff;
+    background: #000;
+    color: #fff;
+}
+
+html[data-theme="contrast"] .tenant-quick-action strong,
+html[data-theme="contrast"] .tenant-quick-action small,
+html[data-theme="contrast"] .tenant-quick-action-kicker,
+html[data-theme="contrast"] .tenant-dashboard .tenant-summary-grid span,
+html[data-theme="contrast"] .tenant-dashboard .tenant-summary-grid strong {
+    color: #fff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tenant-dashboard .tenant-quick-action {
+        transition: none;
     }
 }

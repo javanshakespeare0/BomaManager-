@@ -7,8 +7,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
-<body class="dashboard-page{% if current_user.role == 'landlord' %} landlord-dashboard-page{% endif %}">
-<div class="container dashboard-shell{% if current_user.role == 'landlord' %} landlord-dashboard{% endif %}">
+<body class="dashboard-page{% if current_user.role == 'landlord' %} landlord-dashboard-page{% elif current_user.role == 'tenant' %} tenant-dashboard-page{% endif %}">
+<div class="container dashboard-shell{% if current_user.role == 'landlord' %} landlord-dashboard{% elif current_user.role == 'tenant' %} tenant-dashboard{% endif %}">
     {% include '_app_navigation.html' %}
     <header class="dashboard-header">
         <div>
@@ -19,7 +19,15 @@
             </a>
             {% endif %}
             <h1>Welcome, {{ current_user.name or current_user.email }}</h1>
-            <p class="muted">Manage your properties, rooms, and tenants.</p>
+            <p class="muted">
+                {% if current_user.role == 'landlord' %}
+                    Manage your properties, rooms, and tenants.
+                {% elif current_user.role == 'tenant' %}
+                    Your home, rent, and requests in one place.
+                {% else %}
+                    Finish setting up your account to get started.
+                {% endif %}
+            </p>
         </div>
         <div class="dashboard-header-actions">
             <label class="theme-control" for="theme-selector">Theme
@@ -162,8 +170,8 @@
                             </div>
                             <div class="attention-row-actions">
                                 <button type="button" class="btn secondary-action" data-copy-value="{{ item.message|e }}" data-copy-kind="reminder">Copy reminder</button>
-                                <form method="POST" action="{{ url_for('log_payment_reminder', room_id=item.room.id) }}" onsubmit="return confirm('Record that you manually sent this payment reminder? BomaManager will not send it.');">
-                                    <button type="submit" class="btn primary-action">Log sent</button>
+                                <form method="POST" action="{{ url_for('log_payment_reminder', room_id=item.room.id) }}">
+                                    <button type="submit" class="btn primary-action">Send reminder in app</button>
                                 </form>
                             </div>
                         {% elif entry.kind == 'maintenance' %}
@@ -412,18 +420,93 @@
         {% endif %}
     
     {% else %}
-        <h2>Tenant Dashboard</h2>
-        <p><a class="btn secondary-action" href="{{ url_for('update_contact') }}">Update my contact number</a></p>
-        <p><a class="btn secondary-action" href="{{ url_for('maintenance_requests') }}">Maintenance requests</a></p>
+        <section class="tenant-dashboard-intro" aria-labelledby="tenant-dashboard-title">
+            <p class="eyebrow">Tenant portal</p>
+            <h2 id="tenant-dashboard-title">Tenant Dashboard</h2>
+            <p class="muted">Quickly check your tenancy, manage rent, and stay up to date.</p>
+        </section>
+        <nav class="tenant-quick-actions" aria-label="Tenant quick actions">
+            {% if room %}
+                <a class="tenant-quick-action" href="#current-tenancy">
+                    <span class="tenant-quick-action-kicker">Your home</span>
+                    <strong>Current tenancy</strong>
+                    <small>{{ room.property.name }} · Room {{ room.room_number }}</small>
+                </a>
+                <a class="tenant-quick-action tenant-quick-action-primary" href="{{ url_for('pay_rent', room_id=room.id) }}">
+                    <span class="tenant-quick-action-kicker">Rent</span>
+                    <strong>{{ 'View payment details' if paid else 'Pay rent' }}</strong>
+                    {% if paid %}
+                        <small>Paid for this period</small>
+                    {% else %}
+                        <small>Ksh {{ '%.2f'|format(balance) }} outstanding</small>
+                    {% endif %}
+                </a>
+            {% elif landlord %}
+                <a class="tenant-quick-action tenant-quick-action-primary" href="#available-rooms">
+                    <span class="tenant-quick-action-kicker">Find a home</span>
+                    <strong>Browse available rooms</strong>
+                    <small>Request a room from your landlord</small>
+                </a>
+            {% endif %}
+            <a class="tenant-quick-action" href="{{ url_for('payment_history') }}">
+                <span class="tenant-quick-action-kicker">Records</span>
+                <strong>Payment history</strong>
+                <small>Review your past payments</small>
+            </a>
+            <a class="tenant-quick-action" href="{{ url_for('maintenance_requests') }}">
+                <span class="tenant-quick-action-kicker">Support</span>
+                <strong>Maintenance</strong>
+                <small>View or submit a request</small>
+            </a>
+            <a class="tenant-quick-action" href="{{ url_for('update_contact') }}">
+                <span class="tenant-quick-action-kicker">Profile</span>
+                <strong>Contact details</strong>
+                <small>Keep your phone number current</small>
+            </a>
+        </nav>
+        <section class="property-card tenant-notifications" id="notifications" aria-labelledby="tenant-notifications-title">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">Updates</p>
+                    <h2 id="tenant-notifications-title">Notifications</h2>
+                </div>
+                {% if unread_notification_count %}
+                    <span class="attention-badge" aria-label="{{ unread_notification_count }} unread notifications">
+                        {{ unread_notification_count }} unread
+                    </span>
+                {% endif %}
+            </div>
+            {% for notification in tenant_notifications %}
+                <article class="tenant-row tenant-notification{% if not notification.read_at %} tenant-notification-unread{% endif %}">
+                    <div>
+                        <strong>{{ notification.title }}</strong>
+                        <span>{{ notification.message }}</span>
+                        <small>{{ notification.created_at.strftime('%d %b %Y at %H:%M') }}</small>
+                    </div>
+                    {% if notification.read_at %}
+                        <span class="count-badge">Read</span>
+                    {% else %}
+                        <form method="POST" action="{{ url_for('mark_tenant_notification_read', notification_id=notification.id) }}">
+                            <button type="submit" class="btn secondary-action">Mark as read</button>
+                        </form>
+                    {% endif %}
+                </article>
+            {% else %}
+                <p class="empty-state">You have no notifications yet.</p>
+            {% endfor %}
+        </section>
         {% if landlord %}
-            <div class="property-card">
-                <h3>Contact your landlord</h3>
+            <div class="property-card tenant-contact-card">
+                <div>
+                    <p class="eyebrow">Need help?</p>
+                    <h3>Contact your landlord</h3>
+                </div>
                 <p>{{ landlord.name or landlord.email }}</p>
                 <p><b>{{ landlord.contact_number or 'No contact number provided yet' }}</b></p>
             </div>
         {% endif %}
         {% if not room and landlord %}
-            <section class="property-card">
+            <section class="property-card tenant-rooms-section" id="available-rooms">
                 <div class="section-heading">
                     <div>
                         <p class="eyebrow">Choose your accommodation</p>
@@ -478,7 +561,7 @@
             </div>
         {% endif %}
         {% if room %}
-            <div class="property-card">
+            <div class="property-card tenant-room-card" id="current-tenancy">
                 <div class="tenant-rent-header">
                     <div>
                         <p class="eyebrow">Current room</p>
@@ -493,8 +576,16 @@
                     <div><span>Total due</span><strong>Ksh {{ total_amount }}</strong></div>
                     <div><span>Balance</span><strong>Ksh {{ balance }}</strong></div>
                 </div>
+                <div class="tenant-rent-progress">
+                    <div class="tenant-rent-progress-heading">
+                        <span>Payment progress</span>
+                        <strong>{{ payment_progress }}%</strong>
+                    </div>
+                    <progress max="100" value="{{ payment_progress }}" aria-label="Rent payment progress"></progress>
+                    <small>Ksh {{ '%.2f'|format(total_paid) }} paid of Ksh {{ '%.2f'|format(total_amount) }}</small>
+                </div>
                 {% if current_period %}<p class="billing-period tenant-period">Billing period: {{ current_period.label }}</p>{% endif %}
-                {% if rent_due_target %}
+                {% if rent_due_target and not paid %}
                     <div class="countdown-banner countdown-banner-tenant" data-countdown-target="{{ rent_due_target.isoformat() }}">
                         <div>
                             <p class="eyebrow">Rent countdown</p>
@@ -507,9 +598,15 @@
                             <div class="countdown-box"><span>Seconds</span><strong data-unit="seconds">{{ '%02d'|format(rent_due_countdown.seconds) }}</strong></div>
                         </div>
                     </div>
+                {% elif paid %}
+                    <p class="tenant-paid-note">You are all paid for this billing period.</p>
                 {% endif %}
             </div>
-            <a class="btn primary-action tenant-pay-button" href="{{ url_for('pay_rent', room_id=room.id) }}">Pay rent now</a>
+            {% if paid %}
+                <a class="btn secondary-action tenant-pay-button" href="{{ url_for('payment_history') }}">View payment history</a>
+            {% else %}
+                <a class="btn primary-action tenant-pay-button" href="{{ url_for('pay_rent', room_id=room.id) }}">Pay rent now</a>
+            {% endif %}
         {% else %}
             <p><b>{{ payment_status }}</b></p>
         {% endif %}

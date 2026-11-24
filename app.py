@@ -330,6 +330,17 @@ class PaymentProof(db.Model):
     reviewer = db.relationship('User', foreign_keys=[reviewed_by_id])
 
 
+class TenantNotification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    category = db.Column(db.String(30), nullable=False)
+    title = db.Column(db.String(120), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    read_at = db.Column(db.DateTime, nullable=True)
+    tenant = db.relationship('User', foreign_keys=[tenant_id], backref='notifications')
+
+
 class PaymentAttempt(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     checkout_request_id = db.Column(db.String(100), unique=True, nullable=False)
@@ -383,6 +394,15 @@ class SubscriptionPaymentAttempt(db.Model):
     requested_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     processed_at = db.Column(db.DateTime, nullable=True)
     outcome = db.Column(db.String(20), nullable=False, default='pending')
+
+
+def create_tenant_notification(tenant_id, category, title, message):
+    db.session.add(TenantNotification(
+        tenant_id=tenant_id,
+        category=category,
+        title=title,
+        message=message,
+    ))
 
 
 # ==================== HELPERS ====================
@@ -466,12 +486,21 @@ with app.app_context():
 @app.context_processor
 def inject_pending_payment_proof_count():
     pending_count = 0
+    unread_notification_count = 0
     if current_user.is_authenticated and current_user.role == 'landlord':
         pending_count = PaymentProof.query.join(Room).join(Property).filter(
             Property.landlord_id == current_user.id,
             PaymentProof.status == 'pending',
         ).count()
-    return {'pending_payment_proof_count': pending_count}
+    elif current_user.is_authenticated and current_user.role == 'tenant':
+        unread_notification_count = TenantNotification.query.filter_by(
+            tenant_id=current_user.id,
+            read_at=None,
+        ).count()
+    return {
+        'pending_payment_proof_count': pending_count,
+        'unread_notification_count': unread_notification_count,
+    }
 
 
 def generate_room_numbers(room_type, room_count, prefix=None, start_number=1):
@@ -1080,6 +1109,7 @@ def dashboard():
     else:
         properties = None
         room = None
+        payment_progress = 0
         payment_status = "No room assigned yet"
         water_bill = None
         total_amount = 0
@@ -1099,9 +1129,18 @@ def dashboard():
             total_amount = summary['total_amount']
             total_paid = summary['total_paid']
             balance = summary['balance']
+            payment_progress = (
+                min(100, max(0, int(total_paid / total_amount * 100)))
+                if total_amount > 0 else 0
+            )
             payment_status = f"Room: {room.room_number} | Property: {room.property.name}"
             rent_due_target = current_period['due_at'] if current_period else None
             rent_due_countdown = get_countdown_parts(rent_due_target) if rent_due_target else None
+    tenant_notifications = []
+    if current_user.role == 'tenant':
+        tenant_notifications = TenantNotification.query.filter_by(
+            tenant_id=current_user.id,
+        ).order_by(TenantNotification.created_at.desc()).all()
     landlord = current_user.landlord if current_user.role == 'tenant' else None
     available_rooms = []
     room_request_by_room = {}
@@ -1151,6 +1190,8 @@ def dashboard():
         room_request_by_room=room_request_by_room,
         room_request_counts=room_request_counts,
         my_room_requests=my_room_requests,
+        tenant_notifications=tenant_notifications,
+        payment_progress=payment_progress,
     )
 
 @app.route('/my-properties')
@@ -1382,15 +1423,26 @@ def log_payment_reminder(room_id):
     if summary['balance'] <= 0:
         flash('There is no outstanding balance to remind this tenant about.', 'warning')
         return redirect(url_for('dashboard'))
+    message = (
+        f"Your rent balance for {period['label']} is Ksh {summary['balance']:.2f} "
+        f"for Room {room.room_number} at {room.property.name}. "
+        "Please submit your payment or contact your landlord if you have already paid."
+    )
     db.session.add(PaymentReminder(
         room_id=room.id,
         tenant_id=room.tenant.id,
         month=period['key'],
         amount=summary['balance'],
-        channel='manual',
+        channel='in_app',
     ))
+    create_tenant_notification(
+        tenant_id=room.tenant.id,
+        category='rent_reminder',
+        title=f'Rent payment reminder · {period["label"]}',
+        message=message,
+    )
     db.session.commit()
-    flash('Manual reminder recorded. No message was sent by BomaManager.', 'success')
+    flash('Rent payment reminder sent to the tenant in BomaManager.', 'success')
     return redirect(url_for('dashboard'))
 
 @app.route('/reports')
@@ -2402,6 +2454,16 @@ def vacate_room(room_id):
         proof.status = 'rejected'
         proof.reviewed_at = datetime.utcnow()
         proof.reviewed_by_id = current_user.id
+        create_tenant_notification(
+            tenant_id=proof.tenant_id,
+            category='payment_proof_rejected',
+            title='Payment proof declined',
+            message=(
+                f'Your payment proof of Ksh {proof.amount:.2f} for '
+                f'{proof.month} was declined because you are no longer assigned '
+                f'to Room {room.room_number} at {room.property.name}.'
+            ),
+        )
     room.tenant_id = None
     room.is_occupied = False
     room.assigned_date = None
@@ -2762,6 +2824,16 @@ def approve_payment_proof(proof_id):
         proof.status = 'rejected'
         proof.reviewed_at = datetime.utcnow()
         proof.reviewed_by_id = current_user.id
+        create_tenant_notification(
+            tenant_id=proof.tenant_id,
+            category='payment_proof_rejected',
+            title='Payment proof declined',
+            message=(
+                f'Your payment proof of Ksh {proof.amount:.2f} for {proof.month} '
+                f'was declined because you are no longer assigned to Room '
+                f'{proof.room.room_number} at {proof.room.property.name}.'
+            ),
+        )
         db.session.commit()
         flash('The tenant is no longer assigned to this room. The proof was closed without recording a payment.')
         return redirect(url_for('dashboard'))
@@ -2786,6 +2858,16 @@ def approve_payment_proof(proof_id):
     proof.status = 'approved'
     proof.reviewed_at = datetime.utcnow()
     proof.reviewed_by_id = current_user.id
+    create_tenant_notification(
+        tenant_id=proof.tenant_id,
+        category='payment_proof_approved',
+        title='Payment proof approved',
+        message=(
+            f'Your payment proof of Ksh {proof.amount:.2f} for {proof.month} '
+            f'was approved for Room {proof.room.room_number} at '
+            f'{proof.room.property.name}. The payment has been added to your account.'
+        ),
+    )
     db.session.commit()
     flash(f'Payment proof approved for Room {proof.room.room_number}.')
     return redirect(url_for('dashboard'))
@@ -2804,9 +2886,34 @@ def reject_payment_proof(proof_id):
     proof.status = 'rejected'
     proof.reviewed_at = datetime.utcnow()
     proof.reviewed_by_id = current_user.id
+    create_tenant_notification(
+        tenant_id=proof.tenant_id,
+        category='payment_proof_rejected',
+        title='Payment proof declined',
+        message=(
+            f'Your payment proof of Ksh {proof.amount:.2f} for {proof.month} '
+            f'was declined for Room {proof.room.room_number} at '
+            f'{proof.room.property.name}. Contact your landlord if you have questions.'
+        ),
+    )
     db.session.commit()
     flash(f'Payment proof for Room {proof.room.room_number} was rejected.')
     return redirect(url_for('dashboard'))
+
+
+@app.route('/notifications/<int:notification_id>/read', methods=['POST'])
+@login_required
+def mark_tenant_notification_read(notification_id):
+    if current_user.role != 'tenant':
+        return "Access Denied", 403
+    notification = TenantNotification.query.filter_by(
+        id=notification_id,
+        tenant_id=current_user.id,
+    ).first_or_404()
+    if notification.read_at is None:
+        notification.read_at = datetime.utcnow()
+        db.session.commit()
+    return redirect(url_for('dashboard', _anchor='notifications'))
 
 
 @app.route('/payment-proof-images/<int:proof_id>')

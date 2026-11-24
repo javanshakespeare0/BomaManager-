@@ -14,6 +14,7 @@ from app import (
     Payment,
     PaymentReminder,
     PaymentProof,
+    TenantNotification,
     Property,
     PendingBill,
     Room,
@@ -219,7 +220,7 @@ class ProductivityFeatureTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 403)
 
-    def test_landlord_can_log_manual_payment_reminder(self):
+    def test_landlord_can_send_in_app_payment_reminder(self):
         self.login_as(self.landlord_id)
 
         response = self.client.post(f'/payment-reminders/{self.room_id}')
@@ -229,8 +230,17 @@ class ProductivityFeatureTests(unittest.TestCase):
             reminder = PaymentReminder.query.one()
             self.assertEqual(reminder.room_id, self.room_id)
             self.assertEqual(reminder.tenant_id, self.tenant_id)
-            self.assertEqual(reminder.channel, 'manual')
+            self.assertEqual(reminder.channel, 'in_app')
             self.assertEqual(reminder.amount, 10000)
+            notification = TenantNotification.query.one()
+            self.assertEqual(notification.category, 'rent_reminder')
+            self.assertIn('Ksh 10000.00', notification.message)
+
+        self.login_as(self.tenant_id)
+        tenant_dashboard = self.client.get('/dashboard')
+        self.assertEqual(tenant_dashboard.status_code, 200)
+        self.assertIn(b'Rent payment reminder', tenant_dashboard.data)
+        self.assertIn(b'Notifications, 1 unread', tenant_dashboard.data)
 
     def test_tenant_payment_proof_requires_landlord_approval(self):
         self.login_as(self.tenant_id)
@@ -276,6 +286,21 @@ class ProductivityFeatureTests(unittest.TestCase):
             self.assertEqual(payment.amount, 10000)
             self.assertEqual(payment.mpesa_code, 'BANK-123')
             self.assertEqual(payment.tenant_id, self.tenant_id)
+            notification = TenantNotification.query.one()
+            self.assertEqual(notification.category, 'payment_proof_approved')
+            notification_id = notification.id
+
+        self.login_as(self.tenant_id)
+        tenant_dashboard = self.client.get('/dashboard')
+        self.assertIn(b'Payment proof approved', tenant_dashboard.data)
+        self.assertIn(b'Notifications, 1 unread', tenant_dashboard.data)
+        self.assertIn(b'Payment progress', tenant_dashboard.data)
+        self.assertIn(b'100%', tenant_dashboard.data)
+        mark_read = self.client.post(f'/notifications/{notification_id}/read')
+        self.assertEqual(mark_read.status_code, 302)
+        tenant_dashboard = self.client.get('/dashboard')
+        self.assertNotIn(b'Notifications, 1 unread', tenant_dashboard.data)
+        self.assertIn(b'>Read</span>', tenant_dashboard.data)
 
     def test_rejecting_payment_proof_does_not_record_a_payment(self):
         self.login_as(self.tenant_id)
@@ -298,6 +323,14 @@ class ProductivityFeatureTests(unittest.TestCase):
             proof = db.session.get(PaymentProof, proof_id)
             self.assertEqual(proof.status, 'rejected')
             self.assertEqual(Payment.query.count(), 0)
+            notification = TenantNotification.query.one()
+            self.assertEqual(notification.category, 'payment_proof_rejected')
+            self.assertIn('was declined', notification.message)
+
+        self.login_as(self.tenant_id)
+        tenant_dashboard = self.client.get('/dashboard')
+        self.assertIn(b'Payment proof declined', tenant_dashboard.data)
+        self.assertIn(b'Notifications, 1 unread', tenant_dashboard.data)
 
     def test_payment_proof_review_is_limited_to_owning_landlord(self):
         self.login_as(self.tenant_id)
