@@ -40,12 +40,11 @@ app.config['SECRET_KEY'] = os.getenv('SECRET_KEY') or (
 )
 if not app.config['SECRET_KEY']:
     raise RuntimeError('SECRET_KEY must be configured in the environment')
-database_url = os.getenv('DATABASE_URL')
-if database_url:
-    if database_url.startswith('postgres://'):
-        database_url = 'postgresql://' + database_url[len('postgres://'):]
-    if database_url.startswith('postgresql://'):
-        database_url = 'postgresql+psycopg://' + database_url[len('postgresql://'):]
+database_url = os.getenv('DATABASE_URL', '')
+if database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql+psycopg://', 1)
+elif database_url.startswith('postgresql://'):
+    database_url = database_url.replace('postgresql://', 'postgresql+psycopg://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url or 'sqlite:///bomamanager.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SESSION_COOKIE_HTTPONLY'] = True
