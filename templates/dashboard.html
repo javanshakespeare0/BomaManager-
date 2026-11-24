@@ -150,7 +150,7 @@
                                 </details>
                             </div>
                             <div class="attention-row-actions">
-                                <form method="POST" action="{{ url_for('approve_payment_proof', proof_id=proof.id) }}" onsubmit="return confirm('Approve this payment proof and record Ksh {{ '%.2f'|format(proof.amount) }} for the room?');">
+                                <form method="POST" action="{{ url_for('approve_payment_proof', proof_id=proof.id) }}" onsubmit="return confirm('Approve this payment proof and record the payment for the room?');">
                                     <button class="btn primary-action" type="submit">Approve payment</button>
                                 </form>
                                 <form method="POST" action="{{ url_for('reject_payment_proof', proof_id=proof.id) }}" onsubmit="return confirm('Reject this payment proof? The rent balance will remain due.');">
@@ -477,19 +477,15 @@
                 {% endif %}
             </div>
             {% for notification in tenant_notifications %}
-                <article class="tenant-row tenant-notification{% if not notification.read_at %} tenant-notification-unread{% endif %}">
+                <article class="tenant-row tenant-notification tenant-notification-unread">
                     <div>
                         <strong>{{ notification.title }}</strong>
                         <span>{{ notification.message }}</span>
                         <small>{{ notification.created_at.strftime('%d %b %Y at %H:%M') }}</small>
                     </div>
-                    {% if notification.read_at %}
-                        <span class="count-badge">Read</span>
-                    {% else %}
-                        <form method="POST" action="{{ url_for('mark_tenant_notification_read', notification_id=notification.id) }}">
-                            <button type="submit" class="btn secondary-action">Mark as read</button>
-                        </form>
-                    {% endif %}
+                    <form method="POST" action="{{ url_for('mark_tenant_notification_read', notification_id=notification.id) }}">
+                        <button type="submit" class="btn secondary-action">Mark as read</button>
+                    </form>
                 </article>
             {% else %}
                 <p class="empty-state">You have no notifications yet.</p>

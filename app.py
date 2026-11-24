@@ -1140,6 +1140,7 @@ def dashboard():
     if current_user.role == 'tenant':
         tenant_notifications = TenantNotification.query.filter_by(
             tenant_id=current_user.id,
+            read_at=None,
         ).order_by(TenantNotification.created_at.desc()).all()
     landlord = current_user.landlord if current_user.role == 'tenant' else None
     available_rooms = []

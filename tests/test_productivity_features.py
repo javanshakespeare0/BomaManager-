@@ -298,9 +298,12 @@ class ProductivityFeatureTests(unittest.TestCase):
         self.assertIn(b'100%', tenant_dashboard.data)
         mark_read = self.client.post(f'/notifications/{notification_id}/read')
         self.assertEqual(mark_read.status_code, 302)
+        with app.app_context():
+            self.assertIsNotNone(db.session.get(TenantNotification, notification_id).read_at)
         tenant_dashboard = self.client.get('/dashboard')
         self.assertNotIn(b'Notifications, 1 unread', tenant_dashboard.data)
-        self.assertIn(b'>Read</span>', tenant_dashboard.data)
+        self.assertNotIn(b'Payment proof approved', tenant_dashboard.data)
+        self.assertIn(b'You have no notifications yet.', tenant_dashboard.data)
 
     def test_rejecting_payment_proof_does_not_record_a_payment(self):
         self.login_as(self.tenant_id)
