@@ -701,16 +701,25 @@ def register():
             password = request.form.get('password', '')
             role = request.form.get('role', '')
             landlord_id = request.form.get('landlord_id') if role == 'tenant' else None
+        phone_input = request.form.get('phone', '').strip()
+        normalized_phone = normalize_kenyan_phone(phone_input)
 
         form_values = {
             'name': name,
             'email': email,
             'role': role,
             'landlord_id': landlord_id or '',
+            'phone': phone_input,
         }
 
-        if not name or not email or (not google_registration and not password) or role not in {'landlord', 'tenant'}:
+        if not name or not email or not phone_input or (not google_registration and not password) or role not in {'landlord', 'tenant'}:
             flash('Complete all required account details.')
+            return render_template(
+                'register.html', landlords=landlords, google_registration=bool(google_registration),
+                form_values=form_values,
+            )
+        if not normalized_phone:
+            flash('Enter a valid Kenyan phone number, such as 07XXXXXXXX or 01XXXXXXXX.')
             return render_template(
                 'register.html', landlords=landlords, google_registration=bool(google_registration),
                 form_values=form_values,
@@ -751,6 +760,7 @@ def register():
             is_landlord=(role == 'landlord'),
             landlord_id=landlord_id if landlord_id else None,
             name=name,
+            contact_number=normalized_phone,
         )
         db.session.add(user)
         db.session.commit()

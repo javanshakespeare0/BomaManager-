@@ -37,6 +37,9 @@
                 <label for="email">Email address</label>
                 <input type="email" id="email" name="email" placeholder="you@example.com" value="{{ form_values.get('email', '') }}" required autocomplete="email">
             {% endif %}
+            <label for="phone">Phone number</label>
+            <input type="tel" id="phone" name="phone" placeholder="0712345678" value="{{ form_values.get('phone', '') }}" required maxlength="20" autocomplete="tel" pattern="(?:\\+254|254|0)?[17][0-9]{8}">
+            <small class="password-strength-text">For example: 0712345678 or 0112345678</small>
 
             {% if not google_registration %}
                 <label for="password">Password</label>
